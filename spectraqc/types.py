@@ -1,35 +1,98 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import numpy as np
 
+
 class Status(str, Enum):
+    """QC status enumeration."""
     PASS = "pass"
     WARN = "warn"
     FAIL = "fail"
 
+
 @dataclass(frozen=True)
 class AudioBuffer:
-    samples: np.ndarray
+    """Audio samples with metadata."""
+    samples: np.ndarray  # mono float64 [-1,1], shape (n,)
     fs: float
     duration: float
 
+
 @dataclass(frozen=True)
 class FrequencyBand:
+    """Frequency band definition."""
     name: str
     f_low: float
     f_high: float
 
+
+@dataclass(frozen=True)
+class LongTermPSD:
+    """Long-term PSD analysis result."""
+    freqs: np.ndarray
+    mean_db: np.ndarray
+    var_db2: np.ndarray  # variance of dB across frames
+
+
 @dataclass(frozen=True)
 class BandMetrics:
+    """Metrics computed for a single frequency band."""
     band: FrequencyBand
     mean_deviation_db: float
     max_deviation_db: float
     variance_ratio: float
 
+
 @dataclass(frozen=True)
 class GlobalMetrics:
+    """Global audio metrics."""
     spectral_tilt_db_per_oct: float
     tilt_deviation_db_per_oct: float
     true_peak_dbtp: float | None = None
     lufs_i: float | None = None
+
+
+@dataclass(frozen=True)
+class ThresholdResult:
+    """Result of evaluating a metric against thresholds."""
+    metric: str
+    value: float
+    units: str
+    status: Status
+    pass_limit: float
+    warn_limit: float
+    notes: str = ""
+
+
+@dataclass(frozen=True)
+class BandDecision:
+    """Decision results for a frequency band."""
+    band: FrequencyBand
+    mean: ThresholdResult
+    max: ThresholdResult
+    variance: ThresholdResult
+
+
+@dataclass(frozen=True)
+class ProgramDecision:
+    """Overall program decision with all band and global decisions."""
+    overall_status: Status
+    band_decisions: list[BandDecision]
+    global_decisions: list[ThresholdResult]
+
+
+@dataclass(frozen=True)
+class ReferenceProfile:
+    """Reference profile for QC comparison."""
+    name: str
+    kind: str
+    version: str
+    profile_hash_sha256: str
+    analysis_lock_hash: str
+    algorithm_ids: list[str]
+    freqs_hz: np.ndarray
+    ref_mean_db: np.ndarray
+    bands: list[FrequencyBand]
+    thresholds: dict
+    normalization: dict  # policy-driven: loudness + true peak
