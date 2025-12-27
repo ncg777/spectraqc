@@ -12,7 +12,7 @@ import numpy as np
 
 from spectraqc.version import __version__
 from spectraqc.types import Status, GlobalMetrics
-from spectraqc.io.audio import load_audio, to_mono
+from spectraqc.io.audio import load_audio, apply_channel_policy
 from spectraqc.analysis.ltpsd import compute_ltpsd
 from spectraqc.metrics.grid import interp_to_grid, interp_var_ratio
 from spectraqc.metrics.smoothing import smooth_octave_fraction
@@ -36,6 +36,27 @@ EXIT_BAD_ARGS = 2
 EXIT_DECODE_ERROR = 3
 EXIT_PROFILE_ERROR = 4
 EXIT_INTERNAL_ERROR = 5
+MIN_EFFECTIVE_SECONDS = 0.5
+
+
+def _build_confidence(audio, effective_duration: float) -> dict:
+    """Build confidence assessment based on decode sanity checks."""
+    reasons: list[str] = []
+    if audio.samples.size == 0 or effective_duration <= 0:
+        reasons.append("zero_length_audio")
+    if effective_duration < MIN_EFFECTIVE_SECONDS:
+        reasons.append(f"short_effective_duration<{MIN_EFFECTIVE_SECONDS}s")
+    if any(
+        "trimmed partial frame" in w or "decoded fewer frames" in w
+        for w in audio.warnings
+    ):
+        reasons.append("truncated_decode")
+    status = "pass" if not reasons else "warn"
+    return {
+        "status": status,
+        "reasons": reasons,
+        "downgraded": bool(reasons)
+    }
 
 
 def _exit_code_for_status(status: Status) -> int:
@@ -49,11 +70,22 @@ def _exit_code_for_status(status: Status) -> int:
 
 def _build_engine_meta() -> dict:
     """Build engine metadata for QCReport."""
+    ffmpeg_version = "unknown"
     try:
-        import pyloudnorm as pyln
-        pyln_version = getattr(pyln, "__version__", "unknown")
+        import subprocess
+        import shutil
+        ffmpeg = shutil.which("ffmpeg")
+        if ffmpeg:
+            proc = subprocess.run(
+                [ffmpeg, "-version"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if proc.stdout:
+                ffmpeg_version = proc.stdout.splitlines()[0].strip()
     except Exception:
-        pyln_version = "unknown"
+        ffmpeg_version = "unknown"
     return {
         "name": "spectraqc",
         "version": __version__,
@@ -62,7 +94,7 @@ def _build_engine_meta() -> dict:
             "python": platform.python_version(),
             "deps": [
                 {"name": "numpy", "version": np.__version__, "hash_sha256": "0" * 64},
-                {"name": "pyloudnorm", "version": pyln_version, "hash_sha256": "0" * 64},
+                {"name": "ffmpeg", "version": ffmpeg_version, "hash_sha256": "0" * 64},
             ]
         }
     }
@@ -103,58 +135,82 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     
     # Load audio
     audio = load_audio(audio_path)
-    analysis_audio = to_mono(audio)
     
     # Analysis parameters (from profile or defaults)
     analysis_lock = profile.analysis_lock or {}
     nfft = int(analysis_lock.get("fft_size", 4096))
     hop = int(analysis_lock.get("hop_size", max(1, nfft // 2)))
     
-    # Compute long-term PSD
-    ltpsd = compute_ltpsd(analysis_audio, nfft=nfft, hop=hop)
-    
-    # Interpolate input PSD onto profile frequency grid
-    input_mean_db = interp_to_grid(ltpsd.freqs, ltpsd.mean_db, profile.freqs_hz)
-    input_var_db2 = interp_var_ratio(ltpsd.freqs, ltpsd.var_db2, profile.freqs_hz)
-    
-    # Apply smoothing if configured
     smoothing_cfg = profile.thresholds.get("_smoothing", {"type": "none"})
-    if smoothing_cfg.get("type") == "octave_fraction":
-        oct_frac = smoothing_cfg.get("octave_fraction", 1/6)
-        input_mean_db = smooth_octave_fraction(profile.freqs_hz, input_mean_db, oct_frac)
-    
-    # Compute deviation from reference
-    delta_db = deviation_curve_db(input_mean_db, profile.ref_mean_db)
-    
-    # Compute band metrics
     ref_var = profile.thresholds.get("_ref_var_db2", np.ones_like(profile.freqs_hz))
-    bm = band_metrics(
-        profile.freqs_hz, delta_db, input_var_db2, ref_var, profile.bands
-    )
-    
-    # Compute global metrics
-    input_tilt = spectral_tilt_db_per_oct(profile.freqs_hz, input_mean_db)
     ref_tilt = spectral_tilt_db_per_oct(profile.freqs_hz, profile.ref_mean_db)
-    tilt_dev = input_tilt - ref_tilt
-    
-    # True peak measurement
-    tp_dbtp = true_peak_dbtp_mono(analysis_audio.samples, analysis_audio.fs)
-    
-    # Loudness measurement
-    try:
-        lufs_i = integrated_lufs_mono(analysis_audio.samples, analysis_audio.fs)
-    except Exception:
-        lufs_i = None
-    
-    global_metrics = GlobalMetrics(
-        spectral_tilt_db_per_oct=input_tilt,
-        tilt_deviation_db_per_oct=tilt_dev,
-        true_peak_dbtp=tp_dbtp,
-        lufs_i=lufs_i
-    )
-    
-    # Evaluate thresholds
-    decision = evaluate(bm, global_metrics, profile.thresholds)
+    channel_policy = str(analysis_lock.get("channel_policy", "mono")).strip().lower()
+    if channel_policy == "per_channel" and mode != "exploratory":
+        raise ValueError("per_channel policy is only supported in exploratory mode.")
+    analysis_buffers = apply_channel_policy(audio, channel_policy)
+
+    def _analyze_single(mono_audio):
+        ltpsd = compute_ltpsd(mono_audio, nfft=nfft, hop=hop)
+        input_mean_db = interp_to_grid(ltpsd.freqs, ltpsd.mean_db, profile.freqs_hz)
+        input_var_db2 = interp_var_ratio(ltpsd.freqs, ltpsd.var_db2, profile.freqs_hz)
+
+        if smoothing_cfg.get("type") == "octave_fraction":
+            oct_frac = smoothing_cfg.get("octave_fraction", 1/6)
+            input_mean_db = smooth_octave_fraction(profile.freqs_hz, input_mean_db, oct_frac)
+
+        delta_db = deviation_curve_db(input_mean_db, profile.ref_mean_db)
+
+        bm = band_metrics(
+            profile.freqs_hz, delta_db, input_var_db2, ref_var, profile.bands
+        )
+
+        input_tilt = spectral_tilt_db_per_oct(profile.freqs_hz, input_mean_db)
+        tilt_dev = input_tilt - ref_tilt
+
+        tp_dbtp = true_peak_dbtp_mono(mono_audio.samples, mono_audio.fs)
+
+        try:
+            lufs_i = integrated_lufs_mono(mono_audio.samples, mono_audio.fs)
+        except Exception:
+            lufs_i = None
+
+        global_metrics = GlobalMetrics(
+            spectral_tilt_db_per_oct=input_tilt,
+            tilt_deviation_db_per_oct=tilt_dev,
+            true_peak_dbtp=tp_dbtp,
+            lufs_i=lufs_i
+        )
+
+        decision = evaluate(bm, global_metrics, profile.thresholds)
+        return {
+            "ltpsd": ltpsd,
+            "input_mean_db": input_mean_db,
+            "input_var_db2": input_var_db2,
+            "delta_db": delta_db,
+            "band_metrics": bm,
+            "global_metrics": global_metrics,
+            "decision": decision
+        }
+
+    results = [_analyze_single(buf) for buf in analysis_buffers]
+    worst_idx = 0
+    if len(results) > 1:
+        order = {Status.PASS: 0, Status.WARN: 1, Status.FAIL: 2}
+        worst_idx = max(
+            range(len(results)),
+            key=lambda i: order[results[i]["decision"].overall_status]
+        )
+
+    chosen = results[worst_idx]
+    ltpsd = chosen["ltpsd"]
+    input_mean_db = chosen["input_mean_db"]
+    input_var_db2 = chosen["input_var_db2"]
+    delta_db = chosen["delta_db"]
+    bm = chosen["band_metrics"]
+    global_metrics = chosen["global_metrics"]
+    decision = chosen["decision"]
+    tp_dbtp = global_metrics.true_peak_dbtp
+    lufs_i = global_metrics.lufs_i
     
     # Build QCReport
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -176,12 +232,13 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     normalization_cfg = profile.normalization or {}
     loud_cfg = normalization_cfg.get("loudness", {})
     tp_cfg = normalization_cfg.get("true_peak", {})
+    loudness_algo_id = "bs1770-4-ffmpeg-ebur128"
     analysis_cfg = {
         "report_id": report_id,
         "created_utc": now_utc,
         "mode": mode,
         "resampled_fs_hz": audio.fs,
-        "channel_policy": "mono",
+        "channel_policy": str(channel_policy),
         "fft_size": nfft,
         "hop_size": hop,
         "window": "hann",
@@ -197,7 +254,7 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
                 "target_lufs_i": float(loud_cfg.get("target_lufs_i", -14.0)),
                 "measured_lufs_i": lufs_i if lufs_i is not None else -100.0,
                 "applied_gain_db": 0.0,
-                "algorithm_id": loud_cfg.get("algorithm_id", "")
+                "algorithm_id": loudness_algo_id
             },
             "true_peak": {
                 "enabled": bool(tp_cfg.get("enabled", False)),
@@ -281,12 +338,8 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
         ]
     }
     
-    # Confidence assessment (placeholder)
-    confidence = {
-        "status": "pass",
-        "reasons": [],
-        "downgraded": False
-    }
+    # Confidence assessment
+    confidence = _build_confidence(audio, audio.duration)
     
     # Build final report
     qcreport = build_qcreport_dict(

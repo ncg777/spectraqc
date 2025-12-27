@@ -41,6 +41,14 @@ def _decode_soundfile(path: str) -> tuple[np.ndarray, float, list[str]]:
         py_warnings.simplefilter("always")
         data, fs = sf.read(path, always_2d=True, dtype="float64")
     warn_list = [str(wi.message) for wi in w]
+    try:
+        info = sf.info(path)
+        if info.frames == 0:
+            warn_list.append("soundfile: file reports zero frames.")
+        elif info.frames > 0 and data.shape[0] < info.frames:
+            warn_list.append("soundfile: decoded fewer frames than file reports.")
+    except Exception:
+        pass
     return data, float(fs), warn_list
 
 
@@ -121,6 +129,8 @@ def load_audio(path: str) -> AudioBuffer:
         data, backend=backend, warnings=warnings_list
     )
     duration = data.shape[0] / float(fs)
+    if data.shape[0] == 0 or duration <= 0:
+        warnings_list.append("decode produced zero-length audio.")
     return AudioBuffer(
         samples=data,
         fs=float(fs),
@@ -146,6 +156,59 @@ def to_mono(audio: AudioBuffer) -> AudioBuffer:
         backend=audio.backend,
         warnings=warnings_list
     )
+
+
+def _mono_from_stereo(
+    audio: AudioBuffer,
+    *,
+    policy_label: str
+) -> AudioBuffer:
+    """Create a mono buffer from stereo input using (L+R)/2."""
+    if audio.channels == 1:
+        return audio
+    mono = ((audio.samples[:, 0] + audio.samples[:, 1]) * 0.5).astype(np.float64)
+    warnings_list = list(audio.warnings)
+    warnings_list.append(f"{audio.backend}: {policy_label} policy applied.")
+    return AudioBuffer(
+        samples=mono,
+        fs=audio.fs,
+        duration=audio.duration,
+        channels=1,
+        backend=audio.backend,
+        warnings=warnings_list
+    )
+
+
+def apply_channel_policy(audio: AudioBuffer, policy: str) -> list[AudioBuffer]:
+    """Apply a channel policy and return analysis-ready buffers."""
+    policy_norm = str(policy).strip().lower()
+    if policy_norm == "mono":
+        return [to_mono(audio)]
+    if policy_norm == "stereo_average":
+        return [_mono_from_stereo(audio, policy_label="stereo_average")]
+    if policy_norm == "mid_only":
+        return [_mono_from_stereo(audio, policy_label="mid_only")]
+    if policy_norm == "per_channel":
+        if audio.channels == 1:
+            return [audio]
+        left = AudioBuffer(
+            samples=audio.samples[:, 0].astype(np.float64),
+            fs=audio.fs,
+            duration=audio.duration,
+            channels=1,
+            backend=audio.backend,
+            warnings=list(audio.warnings)
+        )
+        right = AudioBuffer(
+            samples=audio.samples[:, 1].astype(np.float64),
+            fs=audio.fs,
+            duration=audio.duration,
+            channels=1,
+            backend=audio.backend,
+            warnings=list(audio.warnings)
+        )
+        return [left, right]
+    raise ValueError(f"Unknown channel policy: {policy}")
 
 
 def load_audio_mono(path: str) -> AudioBuffer:
