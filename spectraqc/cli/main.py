@@ -21,6 +21,12 @@ from spectraqc.metrics.integration import band_metrics
 from spectraqc.metrics.tilt import spectral_tilt_db_per_oct
 from spectraqc.metrics.truepeak import true_peak_dbtp_mono
 from spectraqc.metrics.loudness import integrated_lufs_mono
+from spectraqc.algorithms.registry import (
+    build_algorithm_registry,
+    algorithm_ids_from_registry,
+    LOUDNESS_ALGO_ID,
+    TRUE_PEAK_ALGO_ID,
+)
 from spectraqc.profiles.loader import load_reference_profile
 from spectraqc.thresholds.evaluator import evaluate
 from spectraqc.reporting.qcreport import build_qcreport_dict
@@ -140,6 +146,8 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     analysis_lock = profile.analysis_lock or {}
     nfft = int(analysis_lock.get("fft_size", 4096))
     hop = int(analysis_lock.get("hop_size", max(1, nfft // 2)))
+    window = analysis_lock.get("window", "hann")
+    psd_estimator = analysis_lock.get("psd_estimator", "welch")
     
     smoothing_cfg = profile.thresholds.get("_smoothing", {"type": "none"})
     ref_var = profile.thresholds.get("_ref_var_db2", np.ones_like(profile.freqs_hz))
@@ -147,6 +155,29 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     channel_policy = str(analysis_lock.get("channel_policy", "mono")).strip().lower()
     if channel_policy == "per_channel" and mode != "exploratory":
         raise ValueError("per_channel policy is only supported in exploratory mode.")
+    algo_registry = build_algorithm_registry(
+        analysis_lock=analysis_lock,
+        smoothing_cfg=smoothing_cfg,
+        channel_policy=channel_policy
+    )
+    algo_ids = algorithm_ids_from_registry(algo_registry)
+    required_ids = {
+        "ltpsd_welch_hann_powerhz_v1",
+        "interp_linear_clamped_v1",
+        "deviation_diff_db_v1",
+        "band_metrics_df_weighted_v1",
+        "spectral_tilt_regress_log2_v1",
+        LOUDNESS_ALGO_ID,
+        TRUE_PEAK_ALGO_ID,
+        "channel_policy_v1",
+    }
+    if smoothing_cfg.get("type") == "octave_fraction":
+        required_ids.add("smoothing_octave_fraction_v1")
+    else:
+        required_ids.add("smoothing_none_v1")
+    missing_ids = sorted(required_ids.difference(set(algo_ids)))
+    if missing_ids:
+        raise ValueError(f"Missing algorithm registry entries: {missing_ids}")
     analysis_buffers = apply_channel_policy(audio, channel_policy)
 
     def _analyze_single(mono_audio):
@@ -225,15 +256,13 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
         "signed": False,
         "signature": {"algo": "none", "value_b64": ""},
         "analysis_lock_hash": profile.analysis_lock_hash,
-        "algorithm_ids": profile.algorithm_ids
+        "algorithm_ids": algo_ids
     }
     
     # Analysis configuration for report
     normalization_cfg = profile.normalization or {}
     loud_cfg = normalization_cfg.get("loudness", {})
     tp_cfg = normalization_cfg.get("true_peak", {})
-    true_peak_algo_id = "bs1770-4-ffmpeg-ebur128-tp4x"
-    loudness_algo_id = "bs1770-4-ffmpeg-ebur128"
     analysis_cfg = {
         "report_id": report_id,
         "created_utc": now_utc,
@@ -242,9 +271,10 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
         "channel_policy": str(channel_policy),
         "fft_size": nfft,
         "hop_size": hop,
-        "window": "hann",
-        "psd_estimator": "welch",
+        "window": str(window),
+        "psd_estimator": str(psd_estimator),
         "smoothing": smoothing_cfg,
+        "algorithm_registry": algo_registry,
         "bands": [
             {"name": b.name, "f_low_hz": b.f_low, "f_high_hz": b.f_high}
             for b in profile.bands
@@ -255,13 +285,13 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
                 "target_lufs_i": float(loud_cfg.get("target_lufs_i", -14.0)),
                 "measured_lufs_i": lufs_i if lufs_i is not None else -100.0,
                 "applied_gain_db": 0.0,
-                "algorithm_id": loudness_algo_id
+                "algorithm_id": LOUDNESS_ALGO_ID
             },
             "true_peak": {
                 "enabled": bool(tp_cfg.get("enabled", False)),
                 "max_dbtp": float(tp_cfg.get("max_dbtp", -1.0)),
                 "measured_dbtp": tp_dbtp,
-                "algorithm_id": true_peak_algo_id
+                "algorithm_id": TRUE_PEAK_ALGO_ID
             }
         },
         "silence_gate": {

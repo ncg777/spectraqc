@@ -99,4 +99,5 @@ class ReferenceProfile:
     bands: list[FrequencyBand]
     thresholds: dict
     analysis_lock: dict
+    algorithm_registry: dict
     normalization: dict  # policy-driven: loudness + true peak

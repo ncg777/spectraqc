@@ -75,17 +75,20 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         max_dbtp = float(tp.get("max_dbtp", -1.0))
         thresholds["true_peak_dbtp"] = (max_dbtp, max_dbtp + 0.5)
 
+    algorithm_registry = j.get("algorithm_registry", {})
+
     return ReferenceProfile(
         name=j["profile"]["name"],
         kind=j["profile"]["kind"],
         version=j["profile"]["version"],
         profile_hash_sha256=j["integrity"]["profile_hash_sha256"],
         analysis_lock_hash=j.get("analysis_lock_hash", ""),
-        algorithm_ids=[],
+        algorithm_ids=list(j.get("algorithm_ids", [])),
         freqs_hz=freqs,
         ref_mean_db=ref_mean,
         bands=bands,
         thresholds=thresholds,
         analysis_lock=analysis_lock,
+        algorithm_registry=algorithm_registry,
         normalization=normalization,
     )

@@ -18,6 +18,12 @@ from spectraqc.analysis.ltpsd import compute_ltpsd
 from spectraqc.analysis.bands import default_streaming_bands
 from spectraqc.metrics.smoothing import smooth_octave_fraction
 from spectraqc.utils.hashing import sha256_hex_canonical_json
+from spectraqc.algorithms.registry import (
+    build_algorithm_registry,
+    algorithm_ids_from_registry,
+    LOUDNESS_ALGO_ID,
+    TRUE_PEAK_ALGO_ID,
+)
 
 
 def build_reference_profile(
@@ -57,6 +63,18 @@ def build_reference_profile(
     bands = default_streaming_bands()
     
     # Build profile structure
+    algorithm_registry = build_algorithm_registry(
+        analysis_lock={
+            "fft_size": nfft,
+            "hop_size": hop,
+            "window": "hann",
+            "psd_estimator": "welch",
+            "channel_policy": "mono"
+        },
+        smoothing_cfg={"type": "octave_fraction", "octave_fraction": octave_fraction},
+        channel_policy="mono"
+    )
+    algorithm_ids = algorithm_ids_from_registry(algorithm_registry)
     profile = {
         "profile": {
             "name": profile_name,
@@ -85,19 +103,22 @@ def build_reference_profile(
                 "type": "octave_fraction",
                 "octave_fraction": octave_fraction
             },
+            "channel_policy": "mono",
             "normalization": {
                 "loudness": {
                     "enabled": False,
                     "target_lufs_i": -14.0,
-                    "algorithm_id": "bs1770-pyloudnorm"
+                    "algorithm_id": LOUDNESS_ALGO_ID
                 },
                 "true_peak": {
                     "enabled": True,
                     "max_dbtp": -1.0,
-                    "algorithm_id": "os4-sinc-fir"
+                    "algorithm_id": TRUE_PEAK_ALGO_ID
                 }
             }
         },
+        "algorithm_registry": algorithm_registry,
+        "algorithm_ids": algorithm_ids,
         "threshold_model": {
             "rules": {
                 "band_mean": {
