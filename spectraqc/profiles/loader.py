@@ -86,5 +86,6 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         ref_mean_db=ref_mean,
         bands=bands,
         thresholds=thresholds,
+        analysis_lock=analysis_lock,
         normalization=normalization,
     )

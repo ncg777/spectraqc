@@ -95,4 +95,5 @@ class ReferenceProfile:
     ref_mean_db: np.ndarray
     bands: list[FrequencyBand]
     thresholds: dict
+    analysis_lock: dict
     normalization: dict  # policy-driven: loudness + true peak

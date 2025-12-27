@@ -49,6 +49,11 @@ def _exit_code_for_status(status: Status) -> int:
 
 def _build_engine_meta() -> dict:
     """Build engine metadata for QCReport."""
+    try:
+        import pyloudnorm as pyln
+        pyln_version = getattr(pyln, "__version__", "unknown")
+    except Exception:
+        pyln_version = "unknown"
     return {
         "name": "spectraqc",
         "version": __version__,
@@ -57,7 +62,7 @@ def _build_engine_meta() -> dict:
             "python": platform.python_version(),
             "deps": [
                 {"name": "numpy", "version": np.__version__, "hash_sha256": "0" * 64},
-                {"name": "pyloudnorm", "version": "0.1.1", "hash_sha256": "0" * 64},
+                {"name": "pyloudnorm", "version": pyln_version, "hash_sha256": "0" * 64},
             ]
         }
     }
@@ -98,8 +103,9 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     audio = load_wav_mono(audio_path)
     
     # Analysis parameters (from profile or defaults)
-    nfft = 4096
-    hop = 2048
+    analysis_lock = profile.analysis_lock or {}
+    nfft = int(analysis_lock.get("fft_size", 4096))
+    hop = int(analysis_lock.get("hop_size", max(1, nfft // 2)))
     
     # Compute long-term PSD
     ltpsd = compute_ltpsd(audio, nfft=nfft, hop=hop)
@@ -164,6 +170,9 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     }
     
     # Analysis configuration for report
+    normalization_cfg = profile.normalization or {}
+    loud_cfg = normalization_cfg.get("loudness", {})
+    tp_cfg = normalization_cfg.get("true_peak", {})
     analysis_cfg = {
         "report_id": report_id,
         "created_utc": now_utc,
@@ -181,17 +190,17 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
         ],
         "normalization": {
             "loudness": {
-                "enabled": False,
-                "target_lufs_i": -14.0,
+                "enabled": bool(loud_cfg.get("enabled", False)),
+                "target_lufs_i": float(loud_cfg.get("target_lufs_i", -14.0)),
                 "measured_lufs_i": lufs_i if lufs_i is not None else -100.0,
                 "applied_gain_db": 0.0,
-                "algorithm_id": "bs1770-pyloudnorm"
+                "algorithm_id": loud_cfg.get("algorithm_id", "")
             },
             "true_peak": {
-                "enabled": False,
-                "max_dbtp": -1.0,
+                "enabled": bool(tp_cfg.get("enabled", False)),
+                "max_dbtp": float(tp_cfg.get("max_dbtp", -1.0)),
                 "measured_dbtp": tp_dbtp,
-                "algorithm_id": "os4-sinc-fir"
+                "algorithm_id": tp_cfg.get("algorithm_id", "")
             }
         },
         "silence_gate": {
