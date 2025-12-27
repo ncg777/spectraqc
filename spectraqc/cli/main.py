@@ -43,26 +43,83 @@ EXIT_DECODE_ERROR = 3
 EXIT_PROFILE_ERROR = 4
 EXIT_INTERNAL_ERROR = 5
 MIN_EFFECTIVE_SECONDS = 0.5
+SILENCE_MIN_RMS_DBFS = -60.0
+SILENCE_FRAME_SECONDS = 0.1
 
 
-def _build_confidence(audio, effective_duration: float) -> dict:
+def _build_confidence(
+    audio,
+    *,
+    effective_duration: float,
+    silence_ratio: float,
+    resampled: bool
+) -> dict:
     """Build confidence assessment based on decode sanity checks."""
     reasons: list[str] = []
     if audio.samples.size == 0 or effective_duration <= 0:
         reasons.append("zero_length_audio")
     if effective_duration < MIN_EFFECTIVE_SECONDS:
         reasons.append(f"short_effective_duration<{MIN_EFFECTIVE_SECONDS}s")
+    if silence_ratio >= 0.5:
+        reasons.append("high_silence_ratio>=0.5")
     if any(
         "trimmed partial frame" in w or "decoded fewer frames" in w
         for w in audio.warnings
     ):
         reasons.append("truncated_decode")
+    if resampled:
+        reasons.append("resampled_audio")
     status = "pass" if not reasons else "warn"
     return {
         "status": status,
         "reasons": reasons,
         "downgraded": bool(reasons)
     }
+
+
+def _compute_silence_ratio(
+    samples: np.ndarray,
+    fs: float,
+    *,
+    min_rms_dbfs: float = SILENCE_MIN_RMS_DBFS,
+    frame_seconds: float = SILENCE_FRAME_SECONDS
+) -> float:
+    """Compute fraction of frames below RMS threshold."""
+    x = np.asarray(samples, dtype=np.float64)
+    if x.ndim != 1:
+        raise ValueError("_compute_silence_ratio expects mono samples.")
+    if x.size == 0:
+        return 1.0
+    frame_len = max(1, int(round(frame_seconds * fs)))
+    total = 0
+    silent = 0
+    thresh = 10.0 ** (min_rms_dbfs / 20.0)
+    for start in range(0, x.size, frame_len):
+        frame = x[start:start + frame_len]
+        if frame.size == 0:
+            continue
+        rms = float(np.sqrt(np.mean(frame ** 2)))
+        if rms <= thresh:
+            silent += 1
+        total += 1
+    if total == 0:
+        return 1.0
+    return float(silent) / float(total)
+
+
+def _resample_linear(samples: np.ndarray, fs: float, target_fs: float) -> np.ndarray:
+    """Simple linear resampling for mono buffers."""
+    x = np.asarray(samples, dtype=np.float64)
+    if x.size == 0:
+        return x
+    if fs <= 0 or target_fs <= 0:
+        raise ValueError("Sample rates must be positive.")
+    if fs == target_fs:
+        return x
+    n_out = max(1, int(round(x.size * target_fs / fs)))
+    t_in = np.arange(x.size, dtype=np.float64) / fs
+    t_out = np.arange(n_out, dtype=np.float64) / target_fs
+    return np.interp(t_out, t_in, x).astype(np.float64)
 
 
 def _exit_code_for_status(status: Status) -> int:
@@ -148,6 +205,8 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     hop = int(analysis_lock.get("hop_size", max(1, nfft // 2)))
     window = analysis_lock.get("window", "hann")
     psd_estimator = analysis_lock.get("psd_estimator", "welch")
+    target_fs = analysis_lock.get("resample_fs_hz")
+    target_fs = float(target_fs) if target_fs is not None else None
     
     smoothing_cfg = profile.thresholds.get("_smoothing", {"type": "none"})
     ref_var = profile.thresholds.get("_ref_var_db2", np.ones_like(profile.freqs_hz))
@@ -181,7 +240,31 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     analysis_buffers = apply_channel_policy(audio, channel_policy)
 
     def _analyze_single(mono_audio):
-        ltpsd = compute_ltpsd(mono_audio, nfft=nfft, hop=hop)
+        resampled = False
+        resampled_fs = mono_audio.fs
+        resampled_samples = mono_audio.samples
+        if target_fs is not None and target_fs > 0 and target_fs != mono_audio.fs:
+            resampled_samples = _resample_linear(mono_audio.samples, mono_audio.fs, target_fs)
+            resampled_fs = target_fs
+            resampled = True
+        analysis_buffer = mono_audio if not resampled else mono_audio.__class__(
+            samples=resampled_samples,
+            fs=resampled_fs,
+            duration=resampled_samples.size / resampled_fs if resampled_fs > 0 else 0.0,
+            channels=mono_audio.channels,
+            backend=mono_audio.backend,
+            warnings=list(mono_audio.warnings)
+        )
+
+        silence_ratio = _compute_silence_ratio(
+            analysis_buffer.samples,
+            analysis_buffer.fs,
+            min_rms_dbfs=SILENCE_MIN_RMS_DBFS,
+            frame_seconds=SILENCE_FRAME_SECONDS
+        )
+        effective_duration = analysis_buffer.duration * (1.0 - silence_ratio)
+
+        ltpsd = compute_ltpsd(analysis_buffer, nfft=nfft, hop=hop)
         input_mean_db = interp_to_grid(ltpsd.freqs, ltpsd.mean_db, profile.freqs_hz)
         input_var_db2 = interp_var_ratio(ltpsd.freqs, ltpsd.var_db2, profile.freqs_hz)
 
@@ -198,10 +281,10 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
         input_tilt = spectral_tilt_db_per_oct(profile.freqs_hz, input_mean_db)
         tilt_dev = input_tilt - ref_tilt
 
-        tp_dbtp = true_peak_dbtp_mono(mono_audio.samples, mono_audio.fs)
+        tp_dbtp = true_peak_dbtp_mono(analysis_buffer.samples, analysis_buffer.fs)
 
         try:
-            lufs_i = integrated_lufs_mono(mono_audio.samples, mono_audio.fs)
+            lufs_i = integrated_lufs_mono(analysis_buffer.samples, analysis_buffer.fs)
         except Exception:
             lufs_i = None
 
@@ -214,6 +297,10 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
 
         decision = evaluate(bm, global_metrics, profile.thresholds)
         return {
+            "analysis_buffer": analysis_buffer,
+            "resampled": resampled,
+            "silence_ratio": silence_ratio,
+            "effective_duration": effective_duration,
             "ltpsd": ltpsd,
             "input_mean_db": input_mean_db,
             "input_var_db2": input_var_db2,
@@ -242,6 +329,10 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     decision = chosen["decision"]
     tp_dbtp = global_metrics.true_peak_dbtp
     lufs_i = global_metrics.lufs_i
+    analysis_buffer = chosen["analysis_buffer"]
+    silence_ratio = chosen["silence_ratio"]
+    effective_duration = chosen["effective_duration"]
+    resampled = chosen["resampled"]
     
     # Build QCReport
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -267,7 +358,7 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
         "report_id": report_id,
         "created_utc": now_utc,
         "mode": mode,
-        "resampled_fs_hz": audio.fs,
+        "resampled_fs_hz": analysis_buffer.fs,
         "channel_policy": str(channel_policy),
         "fft_size": nfft,
         "hop_size": hop,
@@ -296,9 +387,9 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
         },
         "silence_gate": {
             "enabled": False,
-            "min_rms_dbfs": -60.0,
-            "silence_ratio": 0.0,
-            "effective_seconds": audio.duration
+            "min_rms_dbfs": SILENCE_MIN_RMS_DBFS,
+            "silence_ratio": silence_ratio,
+            "effective_seconds": effective_duration
         }
     }
     
@@ -370,7 +461,12 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     }
     
     # Confidence assessment
-    confidence = _build_confidence(audio, audio.duration)
+    confidence = _build_confidence(
+        audio,
+        effective_duration=effective_duration,
+        silence_ratio=silence_ratio,
+        resampled=resampled
+    )
     
     # Build final report
     qcreport = build_qcreport_dict(
