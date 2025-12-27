@@ -27,6 +27,23 @@ def _status_high_is_bad(value: float, pass_lim: float, warn_lim: float) -> Statu
     return Status.FAIL
 
 
+def _explain(
+    *,
+    metric: str,
+    value: float,
+    units: str,
+    status: Status,
+    pass_lim: float,
+    warn_lim: float,
+    compare: str
+) -> str:
+    """Build a short, human-readable explanation for WARN/FAIL."""
+    if status == Status.PASS:
+        return ""
+    thr = f"pass<= {pass_lim:g} {units}, warn<= {warn_lim:g} {units}"
+    return f"{metric} is {compare} threshold: {value:.3f} {units} ({thr})."
+
+
 def evaluate(
     band_metrics: list[BandMetrics],
     global_metrics: GlobalMetrics,
@@ -62,23 +79,43 @@ def evaluate(
         max_abs = bm.max_deviation_db
 
         # Mean deviation result
+        mean_status = _status_abs(mean_abs, pass_m, warn_m)
         mean_res = ThresholdResult(
             metric="band_mean_deviation",
             value=bm.mean_deviation_db,
             units="dB",
-            status=_status_abs(mean_abs, pass_m, warn_m),
+            status=mean_status,
             pass_limit=pass_m,
-            warn_limit=warn_m
+            warn_limit=warn_m,
+            notes=_explain(
+                metric="band_mean_deviation",
+                value=bm.mean_deviation_db,
+                units="dB",
+                status=mean_status,
+                pass_lim=pass_m,
+                warn_lim=warn_m,
+                compare="outside absolute"
+            )
         )
         
         # Max deviation result
+        max_status = _status_abs(max_abs, pass_x, warn_x)
         max_res = ThresholdResult(
             metric="band_max_deviation",
             value=max_abs,
             units="dB",
-            status=_status_abs(max_abs, pass_x, warn_x),
+            status=max_status,
             pass_limit=pass_x,
-            warn_limit=warn_x
+            warn_limit=warn_x,
+            notes=_explain(
+                metric="band_max_deviation",
+                value=max_abs,
+                units="dB",
+                status=max_status,
+                pass_lim=pass_x,
+                warn_lim=warn_x,
+                compare="outside absolute"
+            )
         )
 
         # Variance ratio result
@@ -93,7 +130,16 @@ def evaluate(
             units="ratio",
             status=v_stat,
             pass_limit=v_pass,
-            warn_limit=v_warn
+            warn_limit=v_warn,
+            notes=_explain(
+                metric="variance_ratio",
+                value=v,
+                units="ratio",
+                status=v_stat,
+                pass_lim=v_pass,
+                warn_lim=v_warn,
+                compare="above"
+            )
         )
 
         bd = BandDecision(band=b, mean=mean_res, max=max_res, variance=var_res)
@@ -118,7 +164,16 @@ def evaluate(
             units="dB/oct",
             status=tilt_stat,
             pass_limit=t_pass,
-            warn_limit=t_warn
+            warn_limit=t_warn,
+            notes=_explain(
+                metric="tilt_deviation",
+                value=global_metrics.tilt_deviation_db_per_oct,
+                units="dB/oct",
+                status=tilt_stat,
+                pass_lim=t_pass,
+                warn_lim=t_warn,
+                compare="outside absolute"
+            )
         )
     ]
 
@@ -135,7 +190,16 @@ def evaluate(
                 units="dBTP",
                 status=tp_stat,
                 pass_limit=tp_pass,
-                warn_limit=tp_warn
+                warn_limit=tp_warn,
+                notes=_explain(
+                    metric="true_peak",
+                    value=float(global_metrics.true_peak_dbtp),
+                    units="dBTP",
+                    status=tp_stat,
+                    pass_lim=tp_pass,
+                    warn_lim=tp_warn,
+                    compare="above"
+                )
             )
         )
         if tp_stat == Status.FAIL:

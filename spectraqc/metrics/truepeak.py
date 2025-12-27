@@ -52,9 +52,26 @@ def true_peak_dbtp_mono(
         raise ValueError(f"ffmpeg ebur128 true peak failed: {stderr.strip()}")
 
     stderr = proc.stderr.decode("utf-8", errors="replace")
-    matches = re.findall(r"TP:\s*(-?\d+(?:\.\d+)?)\s*dB", stderr)
-    if not matches:
-        matches = re.findall(r"True\s*peak:\s*(-?\d+(?:\.\d+)?)\s*dB", stderr, re.IGNORECASE)
-    if not matches:
+    # Prefer true-peak markers; fallback to summary Peak when peak=true.
+    tp_matches = []
+    in_summary = False
+    for line in stderr.splitlines():
+        line_l = line.lower()
+        if "summary" in line_l:
+            in_summary = True
+        if "true peak" in line_l:
+            m = re.search(r"(-?\d+(?:[.,]\d+)?)\s*dB(?:FS)?", line, re.IGNORECASE)
+            if m:
+                tp_matches.append(m.group(1))
+        if "tp:" in line_l and "db" in line_l:
+            m = re.search(r"TP:\s*(-?\d+(?:[.,]\d+)?)\s*dB(?:FS)?", line, re.IGNORECASE)
+            if m:
+                tp_matches.append(m.group(1))
+        if in_summary and "peak:" in line_l and "db" in line_l:
+            m = re.search(r"Peak:\s*(-?\d+(?:[.,]\d+)?)\s*dB(?:FS)?", line, re.IGNORECASE)
+            if m:
+                tp_matches.append(m.group(1))
+    if not tp_matches:
         raise ValueError("ffmpeg ebur128 did not report true peak.")
-    return float(matches[-1])
+    val = tp_matches[-1].replace(",", ".")
+    return float(val)

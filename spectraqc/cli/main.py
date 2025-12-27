@@ -4,6 +4,9 @@ import argparse
 import json
 import sys
 import platform
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -45,6 +48,7 @@ EXIT_INTERNAL_ERROR = 5
 MIN_EFFECTIVE_SECONDS = 0.5
 SILENCE_MIN_RMS_DBFS = -60.0
 SILENCE_FRAME_SECONDS = 0.1
+SUPPORTED_AUDIO_EXTS = {".wav", ".flac", ".aiff", ".aif", ".mp3"}
 
 
 def _build_confidence(
@@ -120,6 +124,285 @@ def _resample_linear(samples: np.ndarray, fs: float, target_fs: float) -> np.nda
     t_in = np.arange(x.size, dtype=np.float64) / fs
     t_out = np.arange(n_out, dtype=np.float64) / target_fs
     return np.interp(t_out, t_in, x).astype(np.float64)
+
+
+def _iter_audio_files(folder: Path, recursive: bool) -> list[Path]:
+    """Collect supported audio files from a folder."""
+    if not folder.exists():
+        raise ValueError(f"Folder not found: {folder}")
+    files: Iterable[Path]
+    files = folder.rglob("*") if recursive else folder.glob("*")
+    out: list[Path] = []
+    for p in files:
+        if p.is_file() and p.suffix.lower() in SUPPORTED_AUDIO_EXTS:
+            out.append(p)
+    return out
+
+
+def _output_path(out_dir: Path, audio_path: Path) -> Path:
+    """Build output report path for a given audio file."""
+    safe_name = audio_path.stem + ".qcreport.json"
+    return out_dir / safe_name
+
+
+def _batch_worker(
+    args: tuple[str, str, str, str | None]
+) -> tuple[str, str, str | None, dict | None]:
+    """Worker for batch analysis."""
+    audio_path, profile_path, mode, out_dir = args
+    try:
+        qcreport, decision, _, _ = _analyze_audio(audio_path, profile_path, mode=mode)
+        if out_dir:
+            out_path = _output_path(Path(out_dir), Path(audio_path))
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(qcreport, indent=2), encoding="utf-8")
+        return (audio_path, decision.overall_status.value, None, qcreport)
+    except Exception as exc:
+        return (audio_path, "error", str(exc), None)
+
+
+def _aggregate_batch_results(results: list[tuple[str, str, str | None, dict | None]]) -> dict:
+    """Aggregate batch results into summary statistics."""
+    counts = {"pass": 0, "warn": 0, "fail": 0, "error": 0}
+    failure_causes: dict[str, int] = {}
+    confidence = {"pass": 0, "warn": 0, "fail": 0}
+    confidence_reasons: dict[str, int] = {}
+    metrics = {
+        "tilt_deviation": [],
+        "true_peak": [],
+        "band_mean_deviation": [],
+        "band_max_deviation": [],
+        "variance_ratio": [],
+    }
+
+    for _, status, err, report in results:
+        if status not in counts:
+            counts["error"] += 1
+        else:
+            counts[status] += 1
+        if err:
+            failure_causes[err] = failure_causes.get(err, 0) + 1
+            continue
+        if not report:
+            continue
+        conf_status = report.get("confidence", {}).get("status", "pass")
+        if conf_status in confidence:
+            confidence[conf_status] += 1
+        for reason in report.get("confidence", {}).get("reasons", []):
+            confidence_reasons[reason] = confidence_reasons.get(reason, 0) + 1
+        # Collect decision notes as failure causes for warn/fail
+        decisions = report.get("decisions", {})
+        for bd in decisions.get("band_decisions", []):
+            for key in ("mean", "max", "variance"):
+                d = bd.get(key, {})
+                d_status = d.get("status")
+                if d_status in ("warn", "fail"):
+                    note = d.get("notes") or d.get("metric", "unknown")
+                    failure_causes[note] = failure_causes.get(note, 0) + 1
+                    if d.get("metric") == "band_mean_deviation":
+                        metrics["band_mean_deviation"].append(d.get("value"))
+                    if d.get("metric") == "band_max_deviation":
+                        metrics["band_max_deviation"].append(d.get("value"))
+                    if d.get("metric") == "variance_ratio":
+                        metrics["variance_ratio"].append(d.get("value"))
+        for gd in decisions.get("global_decisions", []):
+            gd_status = gd.get("status")
+            if gd_status in ("warn", "fail"):
+                note = gd.get("notes") or gd.get("metric", "unknown")
+                failure_causes[note] = failure_causes.get(note, 0) + 1
+                if gd.get("metric") == "tilt_deviation":
+                    metrics["tilt_deviation"].append(gd.get("value"))
+                if gd.get("metric") == "true_peak":
+                    metrics["true_peak"].append(gd.get("value"))
+
+    def _summary(values: list) -> dict | None:
+        vals = [v for v in values if isinstance(v, (int, float))]
+        if not vals:
+            return None
+        arr = np.asarray(vals, dtype=np.float64)
+        return {
+            "count": int(arr.size),
+            "min": float(np.min(arr)),
+            "p50": float(np.percentile(arr, 50)),
+            "p90": float(np.percentile(arr, 90)),
+            "max": float(np.max(arr))
+        }
+
+    distributions = {k: _summary(v) for k, v in metrics.items()}
+    distributions = {k: v for k, v in distributions.items() if v is not None}
+
+    return {
+        "counts": counts,
+        "confidence_counts": confidence,
+        "confidence_reasons": dict(sorted(confidence_reasons.items(), key=lambda kv: kv[1], reverse=True)),
+        "failure_causes": dict(sorted(failure_causes.items(), key=lambda kv: kv[1], reverse=True)),
+        "distributions": distributions
+    }
+
+
+def _render_markdown_summary(summary: dict) -> str:
+    """Render a Markdown summary."""
+    lines = []
+    counts = summary.get("counts", {})
+    lines.append("# Batch Summary")
+    lines.append("")
+    lines.append("## Status Counts")
+    lines.append("")
+    lines.append(f"- pass: {counts.get('pass', 0)}")
+    lines.append(f"- warn: {counts.get('warn', 0)}")
+    lines.append(f"- fail: {counts.get('fail', 0)}")
+    lines.append(f"- error: {counts.get('error', 0)}")
+    lines.append("")
+    conf = summary.get("confidence_counts", {})
+    lines.append("## Confidence Counts")
+    lines.append("")
+    lines.append(f"- pass: {conf.get('pass', 0)}")
+    lines.append(f"- warn: {conf.get('warn', 0)}")
+    lines.append(f"- fail: {conf.get('fail', 0)}")
+    lines.append("")
+    lines.append("## Top Failure Causes")
+    lines.append("")
+    for cause, count in list(summary.get("failure_causes", {}).items())[:10]:
+        lines.append(f"- {cause}: {count}")
+    lines.append("")
+    lines.append("## Metric Distributions")
+    lines.append("")
+    for metric, stats in summary.get("distributions", {}).items():
+        lines.append(f"- {metric}: count={stats['count']} min={stats['min']:.3f} p50={stats['p50']:.3f} p90={stats['p90']:.3f} max={stats['max']:.3f}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _render_corpus_report_md(summary: dict, *, profile_path: str, mode: str) -> str:
+    """Render a one-page Markdown report for batch results."""
+    counts = summary.get("counts", {})
+    conf = summary.get("confidence_counts", {})
+    causes = list(summary.get("failure_causes", {}).items())
+    conf_reasons = list(summary.get("confidence_reasons", {}).items())
+    dists = summary.get("distributions", {})
+
+    lines = []
+    lines.append("# SpectraQC Batch Report")
+    lines.append("")
+    lines.append(f"- Profile: `{profile_path}`")
+    lines.append(f"- Mode: `{mode}`")
+    lines.append("")
+    lines.append("## Corpus Results")
+    lines.append("")
+    lines.append(f"- pass: {counts.get('pass', 0)}")
+    lines.append(f"- warn: {counts.get('warn', 0)}")
+    lines.append(f"- fail: {counts.get('fail', 0)}")
+    lines.append(f"- error: {counts.get('error', 0)}")
+    lines.append("")
+    lines.append("## Confidence Notes")
+    lines.append("")
+    lines.append(f"- pass: {conf.get('pass', 0)}")
+    lines.append(f"- warn: {conf.get('warn', 0)}")
+    lines.append(f"- fail: {conf.get('fail', 0)}")
+    if conf_reasons:
+        lines.append("")
+        lines.append("Top confidence reasons:")
+        for reason, count in conf_reasons[:5]:
+            lines.append(f"- {reason}: {count}")
+    lines.append("")
+    lines.append("## Band Metrics (Distributions)")
+    lines.append("")
+    for metric in ("band_mean_deviation", "band_max_deviation", "variance_ratio"):
+        stats = dists.get(metric)
+        if not stats:
+            continue
+        lines.append(
+            f"- {metric}: count={stats['count']} min={stats['min']:.3f} "
+            f"p50={stats['p50']:.3f} p90={stats['p90']:.3f} max={stats['max']:.3f}"
+        )
+    lines.append("")
+    lines.append("## Global Metrics (Distributions)")
+    lines.append("")
+    for metric in ("tilt_deviation", "true_peak"):
+        stats = dists.get(metric)
+        if not stats:
+            continue
+        lines.append(
+            f"- {metric}: count={stats['count']} min={stats['min']:.3f} "
+            f"p50={stats['p50']:.3f} p90={stats['p90']:.3f} max={stats['max']:.3f}"
+        )
+    lines.append("")
+    lines.append("## Notable Failures")
+    lines.append("")
+    if causes:
+        for cause, count in causes[:10]:
+            lines.append(f"- {cause}: {count}")
+    else:
+        lines.append("- None")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _render_corpus_report_html(summary: dict, *, profile_path: str, mode: str) -> str:
+    """Render a one-page HTML report for batch results."""
+    md = _render_corpus_report_md(summary, profile_path=profile_path, mode=mode)
+    body = md.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    body = body.replace("\n", "<br>\n")
+    return (
+        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        "<title>SpectraQC Batch Report</title>"
+        "<style>body{font-family:Arial,Helvetica,sans-serif;margin:24px;}</style>"
+        "</head><body>"
+        f"{body}"
+        "</body></html>"
+    )
+
+
+def _render_repro_doc(
+    *,
+    profile,
+    algorithm_ids: list[str],
+    profile_path: str,
+    mode: str,
+    audio_path: str | None = None,
+    manifest_path: str | None = None,
+    folder_path: str | None = None,
+    recursive: bool = False
+) -> str:
+    """Render reproducibility documentation."""
+    lines = []
+    lines.append("# Reproducibility")
+    lines.append("")
+    lines.append("## Tooling")
+    lines.append("")
+    lines.append(f"- spectraqc_version: `{__version__}`")
+    lines.append("")
+    lines.append("## Profile")
+    lines.append("")
+    lines.append(f"- profile_path: `{profile_path}`")
+    lines.append(f"- profile_hash_sha256: `{profile.profile_hash_sha256}`")
+    lines.append(f"- profile_version: `{profile.version}`")
+    lines.append("")
+    lines.append("## Algorithms")
+    lines.append("")
+    for algo_id in algorithm_ids:
+        lines.append(f"- {algo_id}")
+    lines.append("")
+    lines.append("## Rerun Instructions")
+    lines.append("")
+    if audio_path:
+        lines.append("```bash")
+        lines.append(f"spectraqc analyze \"{audio_path}\" --profile \"{profile_path}\" --mode {mode}")
+        lines.append("```")
+    elif manifest_path or folder_path:
+        lines.append("```bash")
+        if manifest_path:
+            lines.append(
+                f"spectraqc batch --manifest \"{manifest_path}\" --profile \"{profile_path}\" --mode {mode}"
+            )
+        if folder_path:
+            rec = " --recursive" if recursive else ""
+            lines.append(
+                f"spectraqc batch --folder \"{folder_path}\" --profile \"{profile_path}\" --mode {mode}{rec}"
+            )
+        lines.append("```")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _exit_code_for_status(status: Status) -> int:
@@ -417,6 +700,7 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     # Decisions for report
     decisions_dict = {
         "overall_status": decision.overall_status.value,
+        "technical_status": decision.overall_status.value,
         "band_decisions": [
             {
                 "band_name": bd.band.name,
@@ -426,7 +710,8 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
                     "units": bd.mean.units,
                     "status": bd.mean.status.value,
                     "pass_limit": bd.mean.pass_limit,
-                    "warn_limit": bd.mean.warn_limit
+                    "warn_limit": bd.mean.warn_limit,
+                    "notes": bd.mean.notes
                 },
                 "max": {
                     "metric": bd.max.metric,
@@ -434,7 +719,8 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
                     "units": bd.max.units,
                     "status": bd.max.status.value,
                     "pass_limit": bd.max.pass_limit,
-                    "warn_limit": bd.max.warn_limit
+                    "warn_limit": bd.max.warn_limit,
+                    "notes": bd.max.notes
                 },
                 "variance": {
                     "metric": bd.variance.metric,
@@ -442,7 +728,8 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
                     "units": bd.variance.units,
                     "status": bd.variance.status.value,
                     "pass_limit": bd.variance.pass_limit,
-                    "warn_limit": bd.variance.warn_limit
+                    "warn_limit": bd.variance.warn_limit,
+                    "notes": bd.variance.notes
                 }
             }
             for bd in decision.band_decisions
@@ -454,7 +741,8 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
                 "units": gd.units,
                 "status": gd.status.value,
                 "pass_limit": gd.pass_limit,
-                "warn_limit": gd.warn_limit
+                "warn_limit": gd.warn_limit,
+                "notes": gd.notes
             }
             for gd in decision.global_decisions
         ]
@@ -484,13 +772,13 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
         confidence=confidence
     )
     
-    return qcreport, decision, profile
+    return qcreport, decision, profile, algo_ids
 
 
 def cmd_analyze(args) -> int:
     """Handle analyze command."""
     try:
-        qcreport, decision, _ = _analyze_audio(
+        qcreport, decision, profile, algo_ids = _analyze_audio(
             args.audio_path,
             args.profile,
             mode=args.mode
@@ -503,6 +791,18 @@ def cmd_analyze(args) -> int:
             print(f"Report written to: {args.out}", file=sys.stderr)
         else:
             print(output_json)
+
+        if args.repro_md:
+            Path(args.repro_md).write_text(
+                _render_repro_doc(
+                    profile=profile,
+                    algorithm_ids=algo_ids,
+                    profile_path=args.profile,
+                    mode=args.mode,
+                    audio_path=args.audio_path
+                ),
+                encoding="utf-8"
+            )
         
         return _exit_code_for_status(decision.overall_status)
         
@@ -526,7 +826,7 @@ def cmd_analyze(args) -> int:
 def cmd_validate(args) -> int:
     """Handle validate command."""
     try:
-        _, decision, profile = _analyze_audio(
+        _, decision, profile, _ = _analyze_audio(
             args.audio_path,
             args.profile,
             mode="compliance"
@@ -616,6 +916,105 @@ def cmd_inspect_ref(args) -> int:
         return EXIT_INTERNAL_ERROR
 
 
+def cmd_batch(args) -> int:
+    """Handle batch command."""
+    try:
+        audio_paths: list[Path] = []
+        if args.folder:
+            audio_paths.extend(_iter_audio_files(Path(args.folder), args.recursive))
+        if args.manifest:
+            from spectraqc.corpus.manifest import load_corpus_manifest
+            _, entries, _ = load_corpus_manifest(args.manifest)
+            for e in entries:
+                if e.exclude:
+                    continue
+                audio_paths.append(Path(e.path))
+        if not audio_paths:
+            print("Error: No input files found.", file=sys.stderr)
+            return EXIT_BAD_ARGS
+
+        out_dir = Path(args.out_dir) if args.out_dir else None
+        max_workers = max(1, int(args.workers))
+        max_workers = min(max_workers, len(audio_paths))
+
+        failures = 0
+        results: list[tuple[str, str, str | None, dict | None]] = []
+        if max_workers == 1:
+            for p in audio_paths:
+                audio_path = str(p)
+                result = _batch_worker((audio_path, args.profile, args.mode, str(out_dir) if out_dir else None))
+                results.append(result)
+                if result[2] is not None:
+                    failures += 1
+                    print(f"[ERROR] {result[0]}: {result[2]}", file=sys.stderr)
+                else:
+                    print(f"[OK] {result[0]}: {result[1]}")
+        else:
+            with ProcessPoolExecutor(max_workers=max_workers) as ex:
+                futures = [
+                    ex.submit(_batch_worker, (str(p), args.profile, args.mode, str(out_dir) if out_dir else None))
+                    for p in audio_paths
+                ]
+                for fut in as_completed(futures):
+                    audio_path, status, err, report = fut.result()
+                    results.append((audio_path, status, err, report))
+                    if err:
+                        failures += 1
+                        print(f"[ERROR] {audio_path}: {err}", file=sys.stderr)
+                    else:
+                        print(f"[OK] {audio_path}: {status}")
+
+        summary = _aggregate_batch_results(results)
+        if args.summary_json:
+            Path(args.summary_json).write_text(
+                json.dumps(summary, indent=2),
+                encoding="utf-8"
+            )
+        if args.summary_md:
+            Path(args.summary_md).write_text(
+                _render_markdown_summary(summary),
+                encoding="utf-8"
+            )
+        if args.report_md:
+            Path(args.report_md).write_text(
+                _render_corpus_report_md(summary, profile_path=args.profile, mode=args.mode),
+                encoding="utf-8"
+            )
+        if args.report_html:
+            Path(args.report_html).write_text(
+                _render_corpus_report_html(summary, profile_path=args.profile, mode=args.mode),
+                encoding="utf-8"
+            )
+        if args.repro_md:
+            profile = load_reference_profile(args.profile)
+            algo_registry = build_algorithm_registry(
+                analysis_lock=profile.analysis_lock or {},
+                smoothing_cfg=profile.thresholds.get("_smoothing", {"type": "none"}),
+                channel_policy=str(profile.analysis_lock.get("channel_policy", "mono"))
+            )
+            algo_ids = algorithm_ids_from_registry(algo_registry)
+            Path(args.repro_md).write_text(
+                _render_repro_doc(
+                    profile=profile,
+                    algorithm_ids=algo_ids,
+                    profile_path=args.profile,
+                    mode=args.mode,
+                    manifest_path=args.manifest,
+                    folder_path=args.folder,
+                    recursive=args.recursive
+                ),
+                encoding="utf-8"
+            )
+
+        if failures:
+            return EXIT_INTERNAL_ERROR
+        return EXIT_PASS
+
+    except Exception as e:
+        print(f"Internal error: {e}", file=sys.stderr)
+        return EXIT_INTERNAL_ERROR
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -653,6 +1052,10 @@ def main():
         "--out", "-o",
         help="Output path for QC report JSON"
     )
+    analyze_parser.add_argument(
+        "--repro-md",
+        help="Output path for reproducibility Markdown"
+    )
     analyze_parser.set_defaults(func=cmd_analyze)
     
     # validate command
@@ -688,6 +1091,67 @@ def main():
         help="Path to reference profile JSON"
     )
     inspect_parser.set_defaults(func=cmd_inspect_ref)
+
+    # batch command
+    batch_parser = subparsers.add_parser(
+        "batch",
+        help="Batch analyze a folder or manifest"
+    )
+    batch_parser.add_argument(
+        "--folder",
+        help="Folder containing audio files"
+    )
+    batch_parser.add_argument(
+        "--manifest",
+        help="Corpus manifest JSON path"
+    )
+    batch_parser.add_argument(
+        "--profile", "-p",
+        required=True,
+        help="Path to reference profile JSON"
+    )
+    batch_parser.add_argument(
+        "--mode", "-m",
+        choices=["compliance", "exploratory"],
+        default="compliance",
+        help="Analysis mode (default: compliance)"
+    )
+    batch_parser.add_argument(
+        "--out-dir",
+        help="Output directory for QC report JSONs"
+    )
+    batch_parser.add_argument(
+        "--summary-json",
+        help="Output path for batch summary JSON"
+    )
+    batch_parser.add_argument(
+        "--summary-md",
+        help="Output path for batch summary Markdown"
+    )
+    batch_parser.add_argument(
+        "--report-md",
+        help="Output path for one-page batch report Markdown"
+    )
+    batch_parser.add_argument(
+        "--report-html",
+        help="Output path for one-page batch report HTML"
+    )
+    batch_parser.add_argument(
+        "--repro-md",
+        help="Output path for reproducibility Markdown"
+    )
+    batch_parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subfolders when using --folder"
+    )
+    batch_parser.add_argument(
+        "--workers",
+        type=int,
+        default=max(1, (os.cpu_count() or 2) - 1),
+        help="Parallel workers (default: cpu_count-1)"
+    )
+    batch_parser.set_defaults(func=cmd_batch)
     
     args = parser.parse_args()
     
