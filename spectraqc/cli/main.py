@@ -12,7 +12,7 @@ import numpy as np
 
 from spectraqc.version import __version__
 from spectraqc.types import Status, GlobalMetrics
-from spectraqc.io.audio import load_wav_mono
+from spectraqc.io.audio import load_audio, to_mono
 from spectraqc.analysis.ltpsd import compute_ltpsd
 from spectraqc.metrics.grid import interp_to_grid, interp_var_ratio
 from spectraqc.metrics.smoothing import smooth_octave_fraction
@@ -85,8 +85,10 @@ def _build_input_meta(audio_path: str, audio, fs: float, duration: float) -> dic
         "file_hash_sha256": file_hash,
         "decoded_pcm_hash_sha256": pcm_hash,
         "fs_hz": fs,
-        "channels": 1,  # mono after conversion
-        "duration_s": duration
+        "channels": int(audio.channels),
+        "duration_s": duration,
+        "decode_backend": audio.backend,
+        "decode_warnings": list(audio.warnings),
     }
 
 
@@ -100,7 +102,8 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     profile = load_reference_profile(profile_path)
     
     # Load audio
-    audio = load_wav_mono(audio_path)
+    audio = load_audio(audio_path)
+    analysis_audio = to_mono(audio)
     
     # Analysis parameters (from profile or defaults)
     analysis_lock = profile.analysis_lock or {}
@@ -108,7 +111,7 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     hop = int(analysis_lock.get("hop_size", max(1, nfft // 2)))
     
     # Compute long-term PSD
-    ltpsd = compute_ltpsd(audio, nfft=nfft, hop=hop)
+    ltpsd = compute_ltpsd(analysis_audio, nfft=nfft, hop=hop)
     
     # Interpolate input PSD onto profile frequency grid
     input_mean_db = interp_to_grid(ltpsd.freqs, ltpsd.mean_db, profile.freqs_hz)
@@ -135,11 +138,11 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     tilt_dev = input_tilt - ref_tilt
     
     # True peak measurement
-    tp_dbtp = true_peak_dbtp_mono(audio.samples, audio.fs)
+    tp_dbtp = true_peak_dbtp_mono(analysis_audio.samples, analysis_audio.fs)
     
     # Loudness measurement
     try:
-        lufs_i = integrated_lufs_mono(audio.samples, audio.fs)
+        lufs_i = integrated_lufs_mono(analysis_audio.samples, analysis_audio.fs)
     except Exception:
         lufs_i = None
     

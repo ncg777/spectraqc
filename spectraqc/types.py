@@ -14,9 +14,12 @@ class Status(str, Enum):
 @dataclass(frozen=True)
 class AudioBuffer:
     """Audio samples with metadata."""
-    samples: np.ndarray  # mono float64 [-1,1], shape (n,)
+    samples: np.ndarray  # float64, shape (n,) or (n, 2)
     fs: float
     duration: float
+    channels: int
+    backend: str
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

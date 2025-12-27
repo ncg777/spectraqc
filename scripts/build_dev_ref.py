@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from spectraqc.io.audio import load_wav_mono
+from spectraqc.io.audio import load_audio_mono
 from spectraqc.analysis.ltpsd import compute_ltpsd
 from spectraqc.analysis.bands import default_streaming_bands
 from spectraqc.metrics.smoothing import smooth_octave_fraction
@@ -37,7 +37,7 @@ def build_reference_profile(
         Complete reference profile dictionary
     """
     # Load reference audio
-    audio = load_wav_mono(ref_audio_path)
+    audio = load_audio_mono(ref_audio_path)
     
     # Compute long-term PSD
     nfft = 4096
