@@ -232,6 +232,7 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     normalization_cfg = profile.normalization or {}
     loud_cfg = normalization_cfg.get("loudness", {})
     tp_cfg = normalization_cfg.get("true_peak", {})
+    true_peak_algo_id = "bs1770-4-ffmpeg-ebur128-tp4x"
     loudness_algo_id = "bs1770-4-ffmpeg-ebur128"
     analysis_cfg = {
         "report_id": report_id,
@@ -260,7 +261,7 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
                 "enabled": bool(tp_cfg.get("enabled", False)),
                 "max_dbtp": float(tp_cfg.get("max_dbtp", -1.0)),
                 "measured_dbtp": tp_dbtp,
-                "algorithm_id": tp_cfg.get("algorithm_id", "")
+                "algorithm_id": true_peak_algo_id
             }
         },
         "silence_gate": {
