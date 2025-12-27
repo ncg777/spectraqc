@@ -6209,19 +6209,100 @@
       "type": "octave_fraction",
       "octave_fraction": 0.16666666666666666
     },
+    "channel_policy": "mono",
     "normalization": {
       "loudness": {
         "enabled": false,
         "target_lufs_i": -14.0,
-        "algorithm_id": "bs1770-pyloudnorm"
+        "algorithm_id": "bs1770-4-ffmpeg-ebur128-lufs"
       },
       "true_peak": {
         "enabled": true,
         "max_dbtp": -1.0,
-        "algorithm_id": "os4-sinc-fir"
+        "algorithm_id": "bs1770-4-ffmpeg-ebur128-tp4x"
       }
     }
   },
+  "algorithm_registry": {
+    "ltpsd_welch_hann_powerhz_v1": {
+      "id": "ltpsd_welch_hann_powerhz_v1",
+      "params": {
+        "fft_size": 4096,
+        "hop_size": 2048,
+        "window": "hann",
+        "psd_estimator": "welch",
+        "one_sided": true,
+        "power_norm": "power_per_hz"
+      }
+    },
+    "interp_linear_clamped_v1": {
+      "id": "interp_linear_clamped_v1",
+      "params": {
+        "method": "linear",
+        "edge": "clamp"
+      }
+    },
+    "smoothing_octave_fraction_v1": {
+      "id": "smoothing_octave_fraction_v1",
+      "params": {
+        "type": "octave_fraction",
+        "octave_fraction": 0.16666666666666666,
+        "min_hz": 20.0
+      }
+    },
+    "deviation_diff_db_v1": {
+      "id": "deviation_diff_db_v1",
+      "params": {
+        "operation": "input_minus_reference"
+      }
+    },
+    "band_metrics_df_weighted_v1": {
+      "id": "band_metrics_df_weighted_v1",
+      "params": {
+        "weights": "df",
+        "variance_ratio_eps": 1e-12
+      }
+    },
+    "spectral_tilt_regress_log2_v1": {
+      "id": "spectral_tilt_regress_log2_v1",
+      "params": {
+        "f_low_hz": 50.0,
+        "f_high_hz": 16000.0
+      }
+    },
+    "bs1770-4-ffmpeg-ebur128-lufs": {
+      "id": "bs1770-4-ffmpeg-ebur128-lufs",
+      "params": {
+        "standard": "bs1770-4",
+        "backend": "ffmpeg_ebur128"
+      }
+    },
+    "bs1770-4-ffmpeg-ebur128-tp4x": {
+      "id": "bs1770-4-ffmpeg-ebur128-tp4x",
+      "params": {
+        "standard": "bs1770-4",
+        "backend": "ffmpeg_ebur128",
+        "oversample": 4
+      }
+    },
+    "channel_policy_v1": {
+      "id": "channel_policy_v1",
+      "params": {
+        "policy": "mono"
+      }
+    }
+  },
+  "algorithm_ids": [
+    "band_metrics_df_weighted_v1",
+    "bs1770-4-ffmpeg-ebur128-lufs",
+    "bs1770-4-ffmpeg-ebur128-tp4x",
+    "channel_policy_v1",
+    "deviation_diff_db_v1",
+    "interp_linear_clamped_v1",
+    "ltpsd_welch_hann_powerhz_v1",
+    "smoothing_octave_fraction_v1",
+    "spectral_tilt_regress_log2_v1"
+  ],
   "threshold_model": {
     "rules": {
       "band_mean": {
@@ -6259,7 +6340,7 @@
     }
   },
   "integrity": {
-    "profile_hash_sha256": "ae9edbcffe2767c224b2b5c251c62f7029448df6d4fed425af86035960c6c0e0",
+    "profile_hash_sha256": "332ac97be88c773a8fb22bae5643168c8f900970d750d1880ae201548b6ff514",
     "signed": false,
     "signature": {
       "algo": "none",

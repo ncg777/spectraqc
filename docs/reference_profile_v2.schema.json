@@ -1,0 +1,247 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spectraqc.example/schema/reference_profile_v2.schema.json",
+  "title": "SpectraQC Reference Profile V2",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "profile",
+    "frequency_grid",
+    "reference_curves",
+    "bands",
+    "analysis_lock",
+    "threshold_model",
+    "integrity"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["2.0"] },
+    "profile": {
+      "type": "object",
+      "required": ["name", "kind", "version"],
+      "properties": {
+        "name": { "type": "string" },
+        "kind": { "type": "string", "enum": ["broadcast", "streaming", "archive", "custom"] },
+        "version": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "frequency_grid": {
+      "type": "object",
+      "required": ["grid_kind", "units", "freqs_hz"],
+      "properties": {
+        "grid_kind": { "type": "string", "enum": ["fft_one_sided"] },
+        "units": { "type": "string", "enum": ["Hz"] },
+        "freqs_hz": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2
+        }
+      },
+      "additionalProperties": false
+    },
+    "reference_curves": {
+      "type": "object",
+      "required": ["mean_db"],
+      "properties": {
+        "mean_db": { "type": "array", "items": { "type": "number" } },
+        "var_db2": { "type": "array", "items": { "type": "number" } },
+        "mean_db_p10": { "type": "array", "items": { "type": "number" } },
+        "mean_db_p50": { "type": "array", "items": { "type": "number" } },
+        "mean_db_p90": { "type": "array", "items": { "type": "number" } },
+        "var_db2_p10": { "type": "array", "items": { "type": "number" } },
+        "var_db2_p50": { "type": "array", "items": { "type": "number" } },
+        "var_db2_p90": { "type": "array", "items": { "type": "number" } }
+      },
+      "additionalProperties": false
+    },
+    "bands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "f_low_hz", "f_high_hz"],
+        "properties": {
+          "name": { "type": "string" },
+          "f_low_hz": { "type": "number", "minimum": 0 },
+          "f_high_hz": { "type": "number", "exclusiveMinimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "analysis_lock": {
+      "type": "object",
+      "required": ["fft_size", "hop_size", "window", "psd_estimator", "smoothing", "normalization"],
+      "properties": {
+        "fft_size": { "type": "integer", "minimum": 128 },
+        "hop_size": { "type": "integer", "minimum": 1 },
+        "window": { "type": "string", "enum": ["hann", "hamming", "blackmanharris"] },
+        "psd_estimator": { "type": "string", "enum": ["welch"] },
+        "smoothing": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "type": "string", "enum": ["none", "octave_fraction", "log_hz"] },
+            "octave_fraction": { "type": "number" },
+            "log_hz_bins_per_octave": { "type": "integer" }
+          },
+          "additionalProperties": false
+        },
+        "channel_policy": { "type": "string", "enum": ["mono", "stereo_average", "mid_only", "per_channel"] },
+        "normalization": {
+          "type": "object",
+          "required": ["loudness", "true_peak"],
+          "properties": {
+            "loudness": {
+              "type": "object",
+              "required": ["enabled", "target_lufs_i", "algorithm_id"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "target_lufs_i": { "type": "number" },
+                "algorithm_id": { "type": "string" }
+              },
+              "additionalProperties": false
+            },
+            "true_peak": {
+              "type": "object",
+              "required": ["enabled", "max_dbtp", "algorithm_id"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "max_dbtp": { "type": "number" },
+                "algorithm_id": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "threshold_model": {
+      "type": "object",
+      "required": ["rules", "aggregation"],
+      "properties": {
+        "rules": {
+          "type": "object",
+          "required": ["band_mean", "band_max", "tilt"],
+          "properties": {
+            "band_mean": {
+              "type": "object",
+              "required": ["default", "by_band"],
+              "properties": {
+                "default": {
+                  "type": "object",
+                  "required": ["pass", "warn"],
+                  "properties": {
+                    "pass": { "type": "number" },
+                    "warn": { "type": "number" }
+                  },
+                  "additionalProperties": false
+                },
+                "by_band": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["band_name", "pass", "warn"],
+                    "properties": {
+                      "band_name": { "type": "string" },
+                      "pass": { "type": "number" },
+                      "warn": { "type": "number" }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "band_max": {
+              "type": "object",
+              "required": ["default", "by_band"],
+              "properties": {
+                "default": {
+                  "type": "object",
+                  "required": ["pass", "warn"],
+                  "properties": {
+                    "pass": { "type": "number" },
+                    "warn": { "type": "number" }
+                  },
+                  "additionalProperties": false
+                },
+                "by_band": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["band_name", "pass", "warn"],
+                    "properties": {
+                      "band_name": { "type": "string" },
+                      "pass": { "type": "number" },
+                      "warn": { "type": "number" }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "tilt": {
+              "type": "object",
+              "required": ["pass", "warn"],
+              "properties": {
+                "pass": { "type": "number" },
+                "warn": { "type": "number" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "aggregation": {
+          "type": "object",
+          "required": ["warn_if_warn_band_count_at_least"],
+          "properties": {
+            "warn_if_warn_band_count_at_least": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "corpus_stats": {
+      "type": "object",
+      "required": ["file_count", "total_duration_s", "mean_duration_s", "min_duration_s", "max_duration_s", "sample_rates_hz"],
+      "properties": {
+        "file_count": { "type": "integer", "minimum": 1 },
+        "total_duration_s": { "type": "number", "minimum": 0 },
+        "mean_duration_s": { "type": "number", "minimum": 0 },
+        "min_duration_s": { "type": "number", "minimum": 0 },
+        "max_duration_s": { "type": "number", "minimum": 0 },
+        "sample_rates_hz": { "type": "array", "items": { "type": "integer", "minimum": 8000 } },
+        "percentiles": { "type": "array", "items": { "type": "number" } },
+        "percentile_weighting": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "algorithm_registry": { "type": "object" },
+    "algorithm_ids": { "type": "array", "items": { "type": "string" } },
+    "analysis_lock_hash": { "type": "string" },
+    "integrity": {
+      "type": "object",
+      "required": ["profile_hash_sha256", "signed", "signature"],
+      "properties": {
+        "profile_hash_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "signed": { "type": "boolean" },
+        "signature": {
+          "type": "object",
+          "required": ["algo", "value_b64"],
+          "properties": {
+            "algo": { "type": "string", "enum": ["none", "ed25519"] },
+            "value_b64": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

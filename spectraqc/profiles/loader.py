@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import numpy as np
 from spectraqc.types import ReferenceProfile, FrequencyBand
+from spectraqc.profiles.validator import validate_reference_profile_dict
 
 
 def load_reference_profile(path: str) -> ReferenceProfile:
@@ -16,6 +17,8 @@ def load_reference_profile(path: str) -> ReferenceProfile:
     """
     with open(path, "r", encoding="utf-8") as f:
         j = json.load(f)
+
+    validate_reference_profile_dict(j)
 
     bands = [
         FrequencyBand(b["name"], float(b["f_low_hz"]), float(b["f_high_hz"]))
