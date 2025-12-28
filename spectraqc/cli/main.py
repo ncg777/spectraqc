@@ -343,8 +343,7 @@ def _render_corpus_report_html(
     *,
     profile_path: str,
     mode: str,
-    file_links: list[tuple[str, str, str]] | None = None,
-    viewer_href: str | None = None
+    file_links: list[tuple[str, str, str]] | None = None
 ) -> str:
     """Render a one-page HTML report for batch results."""
     counts = summary.get("counts", {})
@@ -430,14 +429,7 @@ def _render_corpus_report_html(
             "</tbody></table></div>"
         )
 
-    viewer_link_html = ""
-    if viewer_href:
-        viewer_link_html = (
-            "<div class='section'>"
-            "<h2>Report Viewer</h2>"
-            f"<a href='{viewer_href}'>Open interactive viewer</a>"
-            "</div>"
-        )
+    viewer_section_html, viewer_section_css, viewer_section_js = _render_qcreport_viewer_section()
 
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
@@ -460,6 +452,7 @@ def _render_corpus_report_html(
         "td.status.fail{color:#c62828}"
         "td.status.error{color:#6d6d6d}"
         "ul{margin:6px 0 0 18px}"
+        f"{viewer_section_css}"
         "</style></head><body>"
         "<h1>SpectraQC Batch Report</h1>"
         f"<div class='meta'>Profile: <code>{profile_path}</code> | Mode: <code>{mode}</code></div>"
@@ -473,45 +466,50 @@ def _render_corpus_report_html(
         f"{dist_table}</div>"
         "<div class='section'><h2>Notable Failures</h2><ul>"
         f"{top_causes}</ul></div>"
-        f"{viewer_link_html}"
+        f"{viewer_section_html}"
         f"{file_list_html}"
+        f"{viewer_section_js}"
         "</body></html>"
     )
 
 
-def _render_qcreport_viewer_html() -> str:
-    """Render a minimal GUI viewer for QCReport JSON files."""
-    return (
-        "<!doctype html><html><head><meta charset='utf-8'>"
-        "<title>SpectraQC Viewer</title>"
-        "<style>"
-        "body{font-family:Arial,Helvetica,sans-serif;margin:24px;color:#222}"
-        "h1,h2{margin:0 0 12px 0}"
-        ".row{display:flex;gap:16px}"
-        ".panel{flex:1;border:1px solid #eee;padding:12px;border-radius:8px}"
-        "table{border-collapse:collapse;width:100%;font-size:14px}"
-        "th,td{border-bottom:1px solid #eee;padding:6px 8px;text-align:left}"
-        ".status.pass{color:#2e7d32}"
-        ".status.warn{color:#f9a825}"
-        ".status.fail{color:#c62828}"
-        ".status.error{color:#6d6d6d}"
-        "</style></head><body>"
-        "<h1>SpectraQC Report Viewer</h1>"
+def _render_qcreport_viewer_section() -> tuple[str, str, str]:
+    """Render an embedded GUI viewer for QCReport JSON files."""
+    viewer_html = (
+        "<div class='section' id='viewer'>"
+        "<h2>Report Viewer</h2>"
         "<p>Select one or more <code>.qcreport.json</code> files.</p>"
-        "<input id='files' type='file' multiple accept='.json'>"
-        "<div class='row' style='margin-top:16px'>"
-        "<div class='panel'><h2>Reports</h2>"
-        "<table id='list'><thead><tr><th>File</th><th>Status</th><th>Confidence</th></tr></thead><tbody></tbody></table>"
+        "<input id='viewer-files' type='file' multiple accept='.json'>"
+        "<div class='viewer-row' style='margin-top:16px'>"
+        "<div class='viewer-panel'><h3>Reports</h3>"
+        "<table id='viewer-list'><thead><tr><th>File</th><th>Status</th><th>Confidence</th></tr></thead><tbody></tbody></table>"
         "</div>"
-        "<div class='panel'><h2>Details</h2><div id='details'>Select a report.</div></div>"
+        "<div class='viewer-panel'><h3>Details</h3>"
+        "<div id='viewer-details'>Select a report.</div>"
+        "<div id='viewer-charts'></div>"
         "</div>"
+        "</div>"
+        "</div>"
+    )
+    viewer_css = (
+        ".viewer-row{display:flex;gap:16px;flex-wrap:wrap}"
+        ".viewer-panel{flex:1;min-width:320px;border:1px solid #eee;padding:12px;border-radius:8px}"
+        "#viewer-list{border-collapse:collapse;width:100%;font-size:14px}"
+        "#viewer-list th,#viewer-list td{border-bottom:1px solid #eee;padding:6px 8px;text-align:left}"
+        "#viewer-charts{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}"
+        ".viewer-chart{border:1px solid #f0f0f0;padding:8px;border-radius:6px}"
+        ".viewer-chart h3{margin:4px 0 8px 0;font-size:14px}"
+        ".viewer-chart canvas{width:100%;height:auto}"
+        ".viewer-note{color:#555;margin-top:6px;font-size:12px}"
+    )
+    viewer_js = (
         "<script>"
-        "const filesInput=document.getElementById('files');"
-        "const listBody=document.querySelector('#list tbody');"
-        "const details=document.getElementById('details');"
-        "const reports=[];"
+        "const filesInput=document.getElementById('viewer-files');"
+        "const listBody=document.querySelector('#viewer-list tbody');"
+        "const details=document.getElementById('viewer-details');"
+        "const charts=document.getElementById('viewer-charts');"
         "filesInput.addEventListener('change', async (e)=>{"
-        "  reports.length=0; listBody.innerHTML=''; details.textContent='Select a report.';"
+        "  listBody.innerHTML=''; details.textContent='Select a report.'; charts.innerHTML='';"
         "  const files=[...e.target.files];"
         "  for(const f of files){"
         "    const text=await f.text();"
@@ -519,18 +517,79 @@ def _render_qcreport_viewer_html() -> str:
         "      const j=JSON.parse(text);"
         "      const status=j.decisions?.overall_status||'unknown';"
         "      const conf=j.confidence?.status||'unknown';"
-        "      reports.push({file:f.name, json:j});"
         "      const tr=document.createElement('tr');"
-        "      tr.innerHTML=`<td>${f.name}</td><td class='status ${status}'>${status}</td><td>${conf}</td>`;"
+        "      tr.innerHTML=`<td>${escapeHtml(f.name)}</td><td class='status ${status}'>${status}</td><td>${conf}</td>`;"
         "      tr.addEventListener('click',()=>renderDetails(j,f.name));"
         "      listBody.appendChild(tr);"
         "    }catch(err){"
         "      const tr=document.createElement('tr');"
-        "      tr.innerHTML=`<td>${f.name}</td><td class='status error'>error</td><td>invalid json</td>`;"
+        "      tr.innerHTML=`<td>${escapeHtml(f.name)}</td><td class='status error'>error</td><td>invalid json</td>`;"
         "      listBody.appendChild(tr);"
         "    }"
         "  }"
         "});"
+        "function escapeHtml(value){"
+        "  const map={'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'};"
+        "  return String(value).replace(/[&<>\"']/g,(c)=>map[c]);"
+        "}"
+        "function formatLabel(label){"
+        "  const cleaned=String(label).replace(/_/g,' ');"
+        "  return cleaned.length>16?cleaned.slice(0,15)+'...':cleaned;"
+        "}"
+        "function formatNumber(value){"
+        "  if(!Number.isFinite(value)) return 'n/a';"
+        "  return Math.abs(value)>=10?value.toFixed(1):value.toFixed(2);"
+        "}"
+        "function renderBarChart(container,title,labels,values,units){"
+        "  if(!labels.length||!values.length) return;"
+        "  const wrapper=document.createElement('div');"
+        "  wrapper.className='viewer-chart';"
+        "  const h=document.createElement('h3');"
+        "  h.textContent=title;"
+        "  wrapper.appendChild(h);"
+        "  const canvas=document.createElement('canvas');"
+        "  canvas.width=560; canvas.height=220;"
+        "  wrapper.appendChild(canvas);"
+        "  const ctx=canvas.getContext('2d');"
+        "  const padding={top:20,right:16,bottom:40,left:46};"
+        "  const w=canvas.width-padding.left-padding.right;"
+        "  const hgt=canvas.height-padding.top-padding.bottom;"
+        "  const minVal=Math.min(0,...values);"
+        "  const maxVal=Math.max(0,...values);"
+        "  const range=(maxVal-minVal)||1;"
+        "  const scaleY=hgt/range;"
+        "  const yZero=padding.top+(maxVal-0)*scaleY;"
+        "  ctx.clearRect(0,0,canvas.width,canvas.height);"
+        "  ctx.strokeStyle='#ccc'; ctx.lineWidth=1;"
+        "  ctx.beginPath(); ctx.moveTo(padding.left,yZero); ctx.lineTo(padding.left+w,yZero); ctx.stroke();"
+        "  ctx.beginPath(); ctx.moveTo(padding.left,padding.top); ctx.lineTo(padding.left,padding.top+hgt); ctx.stroke();"
+        "  ctx.fillStyle='#666'; ctx.font='11px Arial,Helvetica,sans-serif';"
+        "  ctx.fillText(formatNumber(maxVal)+(units?` ${units}`:''),4,padding.top+8);"
+        "  ctx.fillText(formatNumber(minVal)+(units?` ${units}`:''),4,padding.top+hgt);"
+        "  const barWidth=w/values.length;"
+        "  const labelStep=Math.max(1,Math.ceil(values.length/10));"
+        "  for(let i=0;i<values.length;i++){"
+        "    const v=values[i];"
+        "    const x=padding.left+i*barWidth+4;"
+        "    const barH=Math.abs(v)*scaleY;"
+        "    const y=v>=0?yZero-barH:yZero;"
+        "    ctx.fillStyle=v>=0?'#4caf50':'#e53935';"
+        "    ctx.fillRect(x,y,Math.max(2,barWidth-8),barH);"
+        "    if(i%labelStep===0){"
+        "      ctx.save();"
+        "      ctx.translate(x, padding.top+hgt+12);"
+        "      ctx.rotate(-0.35);"
+        "      ctx.fillStyle='#555';"
+        "      ctx.fillText(formatLabel(labels[i]),0,0);"
+        "      ctx.restore();"
+        "    }"
+        "  }"
+        "  const note=document.createElement('div');"
+        "  note.className='viewer-note';"
+        "  note.textContent=`min ${formatNumber(minVal)}${units?` ${units}`:''}, max ${formatNumber(maxVal)}${units?` ${units}`:''}`;"
+        "  wrapper.appendChild(note);"
+        "  container.appendChild(wrapper);"
+        "}"
         "function renderDetails(j,name){"
         "  const status=j.decisions?.overall_status||'unknown';"
         "  const conf=j.confidence?.status||'unknown';"
@@ -551,15 +610,65 @@ def _render_qcreport_viewer_html() -> str:
         "    }"
         "  }"
         "  details.innerHTML = `"
-        "    <strong>${name}</strong><br>"
+        "    <strong>${escapeHtml(name)}</strong><br>"
         "    Status: <span class='status ${status}'>${status}</span><br>"
         "    Confidence: ${conf}<br><br>"
-        "    <strong>Notable notes</strong><ul>${notes.slice(0,10).map(n=>`<li>${n}</li>`).join('')||'<li>None</li>'}</ul>"
+        "    <strong>Notable notes</strong><ul>${notes.slice(0,10).map(n=>`<li>${escapeHtml(n)}</li>`).join('')||'<li>None</li>'}</ul>"
         "  `;"
+        "  charts.innerHTML='';"
+        "  const bandMetrics=j.band_metrics||[];"
+        "  const bandLabels=[];"
+        "  const meanValues=[];"
+        "  const maxValues=[];"
+        "  const varValues=[];"
+        "  for(const bm of bandMetrics){"
+        "    const label=bm.band_name||'band';"
+        "    if(Number.isFinite(bm.mean_deviation_db)){"
+        "      bandLabels.push(label);"
+        "      meanValues.push(bm.mean_deviation_db);"
+        "    }"
+        "  }"
+        "  if(meanValues.length){"
+        "    renderBarChart(charts,'Band Mean Deviation',bandLabels,meanValues,'dB');"
+        "  }"
+        "  const bandLabelsMax=[];"
+        "  for(const bm of bandMetrics){"
+        "    const label=bm.band_name||'band';"
+        "    if(Number.isFinite(bm.max_deviation_db)){"
+        "      bandLabelsMax.push(label);"
+        "      maxValues.push(bm.max_deviation_db);"
+        "    }"
+        "  }"
+        "  if(maxValues.length){"
+        "    renderBarChart(charts,'Band Max Deviation',bandLabelsMax,maxValues,'dB');"
+        "  }"
+        "  const bandLabelsVar=[];"
+        "  for(const bm of bandMetrics){"
+        "    const label=bm.band_name||'band';"
+        "    if(Number.isFinite(bm.variance_ratio)){"
+        "      bandLabelsVar.push(label);"
+        "      varValues.push(bm.variance_ratio);"
+        "    }"
+        "  }"
+        "  if(varValues.length){"
+        "    renderBarChart(charts,'Band Variance Ratio',bandLabelsVar,varValues,'');"
+        "  }"
+        "  const gm=j.global_metrics||{};"
+        "  const gLabels=[];"
+        "  const gValues=[];"
+        "  for(const [key,val] of Object.entries(gm)){"
+        "    if(Number.isFinite(val)){"
+        "      gLabels.push(key);"
+        "      gValues.push(val);"
+        "    }"
+        "  }"
+        "  if(gValues.length){"
+        "    renderBarChart(charts,'Global Metrics',gLabels,gValues,'');"
+        "  }"
         "}"
         "</script>"
-        "</body></html>"
     )
+    return viewer_html, viewer_css, viewer_js
 
 
 def _render_repro_doc(
@@ -1199,22 +1308,13 @@ def cmd_batch(args) -> int:
                     link_path = _output_path(out_dir, Path(audio_path))
                     href = os.path.relpath(link_path, report_html_path.parent)
                     file_links.append((label, status, href))
-            viewer_href = None
-            if args.viewer_html:
-                viewer_href = os.path.relpath(Path(args.viewer_html), report_html_path.parent)
             report_html_path.write_text(
                 _render_corpus_report_html(
                     summary,
                     profile_path=args.profile,
                     mode=args.mode,
-                    file_links=file_links,
-                    viewer_href=viewer_href
+                    file_links=file_links
                 ),
-                encoding="utf-8"
-            )
-        if args.viewer_html:
-            Path(args.viewer_html).write_text(
-                _render_qcreport_viewer_html(),
                 encoding="utf-8"
             )
         if args.repro_md:
@@ -1367,10 +1467,6 @@ def main():
     batch_parser.add_argument(
         "--report-html",
         help="Output path for one-page batch report HTML"
-    )
-    batch_parser.add_argument(
-        "--viewer-html",
-        help="Output path for interactive QCReport viewer HTML"
     )
     batch_parser.add_argument(
         "--repro-md",
