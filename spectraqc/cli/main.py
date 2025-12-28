@@ -338,17 +338,226 @@ def _render_corpus_report_md(summary: dict, *, profile_path: str, mode: str) -> 
     return "\n".join(lines)
 
 
-def _render_corpus_report_html(summary: dict, *, profile_path: str, mode: str) -> str:
+def _render_corpus_report_html(
+    summary: dict,
+    *,
+    profile_path: str,
+    mode: str,
+    file_links: list[tuple[str, str, str]] | None = None,
+    viewer_href: str | None = None
+) -> str:
     """Render a one-page HTML report for batch results."""
-    md = _render_corpus_report_md(summary, profile_path=profile_path, mode=mode)
-    body = md.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    body = body.replace("\n", "<br>\n")
+    counts = summary.get("counts", {})
+    conf = summary.get("confidence_counts", {})
+    causes = list(summary.get("failure_causes", {}).items())
+    conf_reasons = list(summary.get("confidence_reasons", {}).items())
+    dists = summary.get("distributions", {})
+
+    def _svg_bar(name: str, value: int, max_value: int, color: str) -> str:
+        width = 240
+        height = 18
+        fill_w = int(width * (value / max_value)) if max_value > 0 else 0
+        return (
+            f"<div class='bar-row'><span class='bar-label'>{name}</span>"
+            f"<svg width='{width}' height='{height}' role='img' aria-label='{name}'>"
+            f"<rect width='{width}' height='{height}' fill='#f0f0f0' />"
+            f"<rect width='{fill_w}' height='{height}' fill='{color}' />"
+            f"</svg><span class='bar-value'>{value}</span></div>"
+        )
+
+    total = max(1, sum(counts.values()))
+    conf_total = max(1, sum(conf.values()))
+
+    def _dist_table(metric: str, stats: dict) -> str:
+        return (
+            "<tr>"
+            f"<td>{metric}</td>"
+            f"<td>{stats['count']}</td>"
+            f"<td>{stats['min']:.3f}</td>"
+            f"<td>{stats['p50']:.3f}</td>"
+            f"<td>{stats['p90']:.3f}</td>"
+            f"<td>{stats['max']:.3f}</td>"
+            "</tr>"
+        )
+
+    dist_rows = []
+    for metric in ("band_mean_deviation", "band_max_deviation", "variance_ratio", "tilt_deviation", "true_peak"):
+        stats = dists.get(metric)
+        if stats:
+            dist_rows.append(_dist_table(metric, stats))
+    dist_table = (
+        "<table><thead><tr>"
+        "<th>Metric</th><th>Count</th><th>Min</th><th>P50</th><th>P90</th><th>Max</th>"
+        "</tr></thead><tbody>"
+        + "".join(dist_rows) +
+        "</tbody></table>"
+    )
+
+    top_causes = "".join(
+        f"<li>{cause}: {count}</li>" for cause, count in causes[:10]
+    ) or "<li>None</li>"
+    top_conf = "".join(
+        f"<li>{reason}: {count}</li>" for reason, count in conf_reasons[:5]
+    ) or "<li>None</li>"
+
+    status_bars = "".join([
+        _svg_bar("pass", counts.get("pass", 0), total, "#4caf50"),
+        _svg_bar("warn", counts.get("warn", 0), total, "#ffb300"),
+        _svg_bar("fail", counts.get("fail", 0), total, "#e53935"),
+        _svg_bar("error", counts.get("error", 0), total, "#6d6d6d"),
+    ])
+    conf_bars = "".join([
+        _svg_bar("pass", conf.get("pass", 0), conf_total, "#4caf50"),
+        _svg_bar("warn", conf.get("warn", 0), conf_total, "#ffb300"),
+        _svg_bar("fail", conf.get("fail", 0), conf_total, "#e53935"),
+    ])
+
+    file_list_html = ""
+    if file_links:
+        rows = []
+        for label, status, href in file_links:
+            rows.append(
+                "<tr>"
+                f"<td class='file'>{label}</td>"
+                f"<td class='status {status}'>{status}</td>"
+                f"<td><a href='{href}'>report</a></td>"
+                "</tr>"
+            )
+        file_list_html = (
+            "<div class='section'><h2>Per-Track Reports</h2>"
+            "<table><thead><tr><th>File</th><th>Status</th><th>QCReport</th></tr></thead><tbody>"
+            + "".join(rows) +
+            "</tbody></table></div>"
+        )
+
+    viewer_link_html = ""
+    if viewer_href:
+        viewer_link_html = (
+            "<div class='section'>"
+            "<h2>Report Viewer</h2>"
+            f"<a href='{viewer_href}'>Open interactive viewer</a>"
+            "</div>"
+        )
+
     return (
-        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        "<!doctype html><html><head><meta charset='utf-8'>"
         "<title>SpectraQC Batch Report</title>"
-        "<style>body{font-family:Arial,Helvetica,sans-serif;margin:24px;}</style>"
-        "</head><body>"
-        f"{body}"
+        "<style>"
+        "body{font-family:Arial,Helvetica,sans-serif;margin:24px;color:#222}"
+        "h1,h2{margin:0 0 12px 0}"
+        ".meta{color:#555;margin-bottom:16px}"
+        ".section{margin:20px 0}"
+        ".bar-row{display:flex;align-items:center;gap:8px;margin:6px 0}"
+        ".bar-label{width:60px;text-transform:uppercase;font-size:12px;color:#555}"
+        ".bar-value{width:40px;text-align:right;font-variant-numeric:tabular-nums}"
+        "table{border-collapse:collapse;width:100%;font-size:14px}"
+        "th,td{border-bottom:1px solid #eee;padding:6px 8px;text-align:right}"
+        "th:first-child,td:first-child{text-align:left}"
+        "td.file{max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+        "td.status{font-weight:bold;text-transform:uppercase}"
+        "td.status.pass{color:#2e7d32}"
+        "td.status.warn{color:#f9a825}"
+        "td.status.fail{color:#c62828}"
+        "td.status.error{color:#6d6d6d}"
+        "ul{margin:6px 0 0 18px}"
+        "</style></head><body>"
+        "<h1>SpectraQC Batch Report</h1>"
+        f"<div class='meta'>Profile: <code>{profile_path}</code> | Mode: <code>{mode}</code></div>"
+        "<div class='section'><h2>Corpus Results</h2>"
+        f"{status_bars}</div>"
+        "<div class='section'><h2>Confidence Notes</h2>"
+        f"{conf_bars}"
+        "<h3>Top confidence reasons</h3><ul>"
+        f"{top_conf}</ul></div>"
+        "<div class='section'><h2>Metric Distributions</h2>"
+        f"{dist_table}</div>"
+        "<div class='section'><h2>Notable Failures</h2><ul>"
+        f"{top_causes}</ul></div>"
+        f"{viewer_link_html}"
+        f"{file_list_html}"
+        "</body></html>"
+    )
+
+
+def _render_qcreport_viewer_html() -> str:
+    """Render a minimal GUI viewer for QCReport JSON files."""
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<title>SpectraQC Viewer</title>"
+        "<style>"
+        "body{font-family:Arial,Helvetica,sans-serif;margin:24px;color:#222}"
+        "h1,h2{margin:0 0 12px 0}"
+        ".row{display:flex;gap:16px}"
+        ".panel{flex:1;border:1px solid #eee;padding:12px;border-radius:8px}"
+        "table{border-collapse:collapse;width:100%;font-size:14px}"
+        "th,td{border-bottom:1px solid #eee;padding:6px 8px;text-align:left}"
+        ".status.pass{color:#2e7d32}"
+        ".status.warn{color:#f9a825}"
+        ".status.fail{color:#c62828}"
+        ".status.error{color:#6d6d6d}"
+        "</style></head><body>"
+        "<h1>SpectraQC Report Viewer</h1>"
+        "<p>Select one or more <code>.qcreport.json</code> files.</p>"
+        "<input id='files' type='file' multiple accept='.json'>"
+        "<div class='row' style='margin-top:16px'>"
+        "<div class='panel'><h2>Reports</h2>"
+        "<table id='list'><thead><tr><th>File</th><th>Status</th><th>Confidence</th></tr></thead><tbody></tbody></table>"
+        "</div>"
+        "<div class='panel'><h2>Details</h2><div id='details'>Select a report.</div></div>"
+        "</div>"
+        "<script>"
+        "const filesInput=document.getElementById('files');"
+        "const listBody=document.querySelector('#list tbody');"
+        "const details=document.getElementById('details');"
+        "const reports=[];"
+        "filesInput.addEventListener('change', async (e)=>{"
+        "  reports.length=0; listBody.innerHTML=''; details.textContent='Select a report.';"
+        "  const files=[...e.target.files];"
+        "  for(const f of files){"
+        "    const text=await f.text();"
+        "    try{"
+        "      const j=JSON.parse(text);"
+        "      const status=j.decisions?.overall_status||'unknown';"
+        "      const conf=j.confidence?.status||'unknown';"
+        "      reports.push({file:f.name, json:j});"
+        "      const tr=document.createElement('tr');"
+        "      tr.innerHTML=`<td>${f.name}</td><td class='status ${status}'>${status}</td><td>${conf}</td>`;"
+        "      tr.addEventListener('click',()=>renderDetails(j,f.name));"
+        "      listBody.appendChild(tr);"
+        "    }catch(err){"
+        "      const tr=document.createElement('tr');"
+        "      tr.innerHTML=`<td>${f.name}</td><td class='status error'>error</td><td>invalid json</td>`;"
+        "      listBody.appendChild(tr);"
+        "    }"
+        "  }"
+        "});"
+        "function renderDetails(j,name){"
+        "  const status=j.decisions?.overall_status||'unknown';"
+        "  const conf=j.confidence?.status||'unknown';"
+        "  const notes=[];"
+        "  const bands=j.decisions?.band_decisions||[];"
+        "  for(const bd of bands){"
+        "    for(const key of ['mean','max','variance']){"
+        "      const d=bd[key];"
+        "      if(d && (d.status==='warn' || d.status==='fail')){"
+        "        if(d.notes) notes.push(d.notes);"
+        "      }"
+        "    }"
+        "  }"
+        "  const globals=j.decisions?.global_decisions||[];"
+        "  for(const gd of globals){"
+        "    if(gd && (gd.status==='warn' || gd.status==='fail')){"
+        "      if(gd.notes) notes.push(gd.notes);"
+        "    }"
+        "  }"
+        "  details.innerHTML = `"
+        "    <strong>${name}</strong><br>"
+        "    Status: <span class='status ${status}'>${status}</span><br>"
+        "    Confidence: ${conf}<br><br>"
+        "    <strong>Notable notes</strong><ul>${notes.slice(0,10).map(n=>`<li>${n}</li>`).join('')||'<li>None</li>'}</ul>"
+        "  `;"
+        "}"
+        "</script>"
         "</body></html>"
     )
 
@@ -981,8 +1190,31 @@ def cmd_batch(args) -> int:
                 encoding="utf-8"
             )
         if args.report_html:
-            Path(args.report_html).write_text(
-                _render_corpus_report_html(summary, profile_path=args.profile, mode=args.mode),
+            report_html_path = Path(args.report_html)
+            file_links = None
+            if out_dir:
+                file_links = []
+                for audio_path, status, err, _ in results:
+                    label = Path(audio_path).name
+                    link_path = _output_path(out_dir, Path(audio_path))
+                    href = os.path.relpath(link_path, report_html_path.parent)
+                    file_links.append((label, status, href))
+            viewer_href = None
+            if args.viewer_html:
+                viewer_href = os.path.relpath(Path(args.viewer_html), report_html_path.parent)
+            report_html_path.write_text(
+                _render_corpus_report_html(
+                    summary,
+                    profile_path=args.profile,
+                    mode=args.mode,
+                    file_links=file_links,
+                    viewer_href=viewer_href
+                ),
+                encoding="utf-8"
+            )
+        if args.viewer_html:
+            Path(args.viewer_html).write_text(
+                _render_qcreport_viewer_html(),
                 encoding="utf-8"
             )
         if args.repro_md:
@@ -1135,6 +1367,10 @@ def main():
     batch_parser.add_argument(
         "--report-html",
         help="Output path for one-page batch report HTML"
+    )
+    batch_parser.add_argument(
+        "--viewer-html",
+        help="Output path for interactive QCReport viewer HTML"
     )
     batch_parser.add_argument(
         "--repro-md",
