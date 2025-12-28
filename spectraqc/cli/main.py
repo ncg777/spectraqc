@@ -145,6 +145,20 @@ def _output_path(out_dir: Path, audio_path: Path) -> Path:
     return out_dir / safe_name
 
 
+def _resolve_report_output_path(
+    out_dir: Path | None,
+    requested: str | None,
+    default_name: str
+) -> Path | None:
+    """Resolve report output path anchored to the QC report directory."""
+    if requested is None or out_dir is None:
+        return None
+    name = os.path.basename(requested) if requested else default_name
+    if not name:
+        name = default_name
+    return out_dir / name
+
+
 def _batch_worker(
     args: tuple[str, str, str, str | None]
 ) -> tuple[str, str, str | None, dict | None]:
@@ -343,7 +357,8 @@ def _render_corpus_report_html(
     *,
     profile_path: str,
     mode: str,
-    file_links: list[tuple[str, str, str]] | None = None
+    file_links: list[tuple[str, str, str]] | None = None,
+    embedded_reports: dict[str, dict] | None = None
 ) -> str:
     """Render a one-page HTML report for batch results."""
     counts = summary.get("counts", {})
@@ -429,7 +444,12 @@ def _render_corpus_report_html(
             "</tbody></table></div>"
         )
 
-    viewer_section_html, viewer_section_css, viewer_section_js = _render_qcreport_viewer_section()
+    embedded_reports = embedded_reports or {}
+    embedded_reports_json = json.dumps(embedded_reports, ensure_ascii=True).replace("</", "<\\/")
+    viewer_section_html, viewer_section_css, viewer_section_js = _render_qcreport_viewer_section(
+        file_links,
+        embedded_reports_json
+    )
 
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
@@ -473,16 +493,49 @@ def _render_corpus_report_html(
     )
 
 
-def _render_qcreport_viewer_section() -> tuple[str, str, str]:
+def _render_qcreport_viewer_section(
+    file_links: list[tuple[str, str, str]] | None,
+    embedded_reports_json: str
+) -> tuple[str, str, str]:
     """Render an embedded GUI viewer for QCReport JSON files."""
+    batch_table_html = ""
+    file_input_class = ""
+    if file_links:
+        rows = []
+        for label, status, href in file_links:
+            rows.append(
+                "<tr>"
+                f"<td class='file'>{label}</td>"
+                f"<td class='status {status}'>{status}</td>"
+                f"<td><button class='viewer-load' data-report-href='{href}' "
+                f"data-report-label='{label}'>Load</button></td>"
+                "</tr>"
+            )
+        batch_table_html = (
+            "<div class='viewer-batch'>"
+            "<h4>Batch Reports</h4>"
+            "<table id='viewer-batch-list'><thead><tr>"
+            "<th>File</th><th>Status</th><th>Load</th>"
+            "</tr></thead><tbody>"
+            + "".join(rows) +
+            "</tbody></table>"
+            "</div>"
+        )
+        file_input_class = " viewer-hidden"
+
     viewer_html = (
         "<div class='section' id='viewer'>"
         "<h2>Report Viewer</h2>"
-        "<p>Select one or more <code>.qcreport.json</code> files.</p>"
-        "<input id='viewer-files' type='file' multiple accept='.json'>"
         "<div class='viewer-row' style='margin-top:16px'>"
         "<div class='viewer-panel'><h3>Reports</h3>"
-        "<table id='viewer-list'><thead><tr><th>File</th><th>Status</th><th>Confidence</th></tr></thead><tbody></tbody></table>"
+        f"{batch_table_html}"
+        f"<div id='viewer-file-input' class='viewer-file-input{file_input_class}'>"
+        "<p>Select one or more <code>.qcreport.json</code> files.</p>"
+        "<input id='viewer-files' type='file' multiple accept='.json'>"
+        "</div>"
+        "<table id='viewer-list'><thead><tr>"
+        "<th>File</th><th>Status</th><th>Confidence</th>"
+        "</tr></thead><tbody></tbody></table>"
         "</div>"
         "<div class='viewer-panel'><h3>Details</h3>"
         "<div id='viewer-details'>Select a report.</div>"
@@ -494,8 +547,13 @@ def _render_qcreport_viewer_section() -> tuple[str, str, str]:
     viewer_css = (
         ".viewer-row{display:flex;gap:16px;flex-wrap:wrap}"
         ".viewer-panel{flex:1;min-width:320px;border:1px solid #eee;padding:12px;border-radius:8px}"
-        "#viewer-list{border-collapse:collapse;width:100%;font-size:14px}"
-        "#viewer-list th,#viewer-list td{border-bottom:1px solid #eee;padding:6px 8px;text-align:left}"
+        ".viewer-file-input{margin-bottom:12px}"
+        ".viewer-file-input.viewer-hidden{display:none}"
+        ".viewer-batch{margin-bottom:12px}"
+        "#viewer-list,#viewer-batch-list{border-collapse:collapse;width:100%;font-size:14px}"
+        "#viewer-list th,#viewer-list td,#viewer-batch-list th,#viewer-batch-list td{border-bottom:1px solid #eee;padding:6px 8px;text-align:left}"
+        ".viewer-load{border:1px solid #ddd;background:#fafafa;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px}"
+        ".viewer-load:hover{background:#f0f0f0}"
         "#viewer-charts{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}"
         ".viewer-chart{border:1px solid #f0f0f0;padding:8px;border-radius:6px}"
         ".viewer-chart h3{margin:4px 0 8px 0;font-size:14px}"
@@ -505,29 +563,12 @@ def _render_qcreport_viewer_section() -> tuple[str, str, str]:
     viewer_js = (
         "<script>"
         "const filesInput=document.getElementById('viewer-files');"
+        "const fileInputWrap=document.getElementById('viewer-file-input');"
         "const listBody=document.querySelector('#viewer-list tbody');"
         "const details=document.getElementById('viewer-details');"
         "const charts=document.getElementById('viewer-charts');"
-        "filesInput.addEventListener('change', async (e)=>{"
-        "  listBody.innerHTML=''; details.textContent='Select a report.'; charts.innerHTML='';"
-        "  const files=[...e.target.files];"
-        "  for(const f of files){"
-        "    const text=await f.text();"
-        "    try{"
-        "      const j=JSON.parse(text);"
-        "      const status=j.decisions?.overall_status||'unknown';"
-        "      const conf=j.confidence?.status||'unknown';"
-        "      const tr=document.createElement('tr');"
-        "      tr.innerHTML=`<td>${escapeHtml(f.name)}</td><td class='status ${status}'>${status}</td><td>${conf}</td>`;"
-        "      tr.addEventListener('click',()=>renderDetails(j,f.name));"
-        "      listBody.appendChild(tr);"
-        "    }catch(err){"
-        "      const tr=document.createElement('tr');"
-        "      tr.innerHTML=`<td>${escapeHtml(f.name)}</td><td class='status error'>error</td><td>invalid json</td>`;"
-        "      listBody.appendChild(tr);"
-        "    }"
-        "  }"
-        "});"
+        "const reportCache=new Map();"
+        f"const embeddedReports={embedded_reports_json};"
         "function escapeHtml(value){"
         "  const map={'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'};"
         "  return String(value).replace(/[&<>\"']/g,(c)=>map[c]);"
@@ -539,6 +580,55 @@ def _render_qcreport_viewer_section() -> tuple[str, str, str]:
         "function formatNumber(value){"
         "  if(!Number.isFinite(value)) return 'n/a';"
         "  return Math.abs(value)>=10?value.toFixed(1):value.toFixed(2);"
+        "}"
+        "function appendLoadedRow(label,status,conf,report){"
+        "  const tr=document.createElement('tr');"
+        "  tr.innerHTML=`<td>${escapeHtml(label)}</td><td class='status ${status}'>${status}</td><td>${conf}</td>`;"
+        "  tr.addEventListener('click',()=>renderDetails(report,label));"
+        "  listBody.appendChild(tr);"
+        "}"
+        "filesInput.addEventListener('change', async (e)=>{"
+        "  listBody.innerHTML=''; details.textContent='Select a report.'; charts.innerHTML='';"
+        "  const files=[...e.target.files];"
+        "  for(const f of files){"
+        "    const text=await f.text();"
+        "    try{"
+        "      const j=JSON.parse(text);"
+        "      const status=j.decisions?.overall_status||'unknown';"
+        "      const conf=j.confidence?.status||'unknown';"
+        "      reportCache.set(f.name,j);"
+        "      appendLoadedRow(f.name,status,conf,j);"
+        "    }catch(err){"
+        "      const tr=document.createElement('tr');"
+        "      tr.innerHTML=`<td>${escapeHtml(f.name)}</td><td class='status error'>error</td><td>invalid json</td>`;"
+        "      listBody.appendChild(tr);"
+        "    }"
+        "  }"
+        "});"
+        "async function loadReportFromUrl(url,label){"
+        "  details.textContent=`Loading ${label}...`;"
+        "  if(embeddedReports && embeddedReports[label]){"
+        "    const j=embeddedReports[label];"
+        "    const status=j.decisions?.overall_status||'unknown';"
+        "    const conf=j.confidence?.status||'unknown';"
+        "    reportCache.set(label,j);"
+        "    appendLoadedRow(label,status,conf,j);"
+        "    renderDetails(j,label);"
+        "    return;"
+        "  }"
+        "  try{"
+        "    const res=await fetch(url);"
+        "    if(!res.ok){throw new Error(`HTTP ${res.status}`);}"
+        "    const j=await res.json();"
+        "    const status=j.decisions?.overall_status||'unknown';"
+        "    const conf=j.confidence?.status||'unknown';"
+        "    reportCache.set(label,j);"
+        "    appendLoadedRow(label,status,conf,j);"
+        "    renderDetails(j,label);"
+        "  }catch(err){"
+        "    details.textContent=`Failed to load ${label}: ${err}`;"
+        "    if(fileInputWrap){fileInputWrap.classList.remove('viewer-hidden');}"
+        "  }"
         "}"
         "function renderBarChart(container,title,labels,values,units){"
         "  if(!labels.length||!values.length) return;"
@@ -590,9 +680,68 @@ def _render_qcreport_viewer_section() -> tuple[str, str, str]:
         "  wrapper.appendChild(note);"
         "  container.appendChild(wrapper);"
         "}"
+        "function renderLineChart(container,title,xs,ys,units,useLog){"
+        "  const points=[];"
+        "  const n=Math.min(xs.length,ys.length);"
+        "  for(let i=0;i<n;i++){"
+        "    const x=xs[i];"
+        "    const y=ys[i];"
+        "    if(!Number.isFinite(x)||!Number.isFinite(y)) continue;"
+        "    if(useLog && x<=0) continue;"
+        "    points.push([x,y]);"
+        "  }"
+        "  if(!points.length) return;"
+        "  const wrapper=document.createElement('div');"
+        "  wrapper.className='viewer-chart';"
+        "  const h=document.createElement('h3');"
+        "  h.textContent=title;"
+        "  wrapper.appendChild(h);"
+        "  const canvas=document.createElement('canvas');"
+        "  canvas.width=560; canvas.height=220;"
+        "  wrapper.appendChild(canvas);"
+        "  const ctx=canvas.getContext('2d');"
+        "  const padding={top:20,right:16,bottom:36,left:46};"
+        "  const w=canvas.width-padding.left-padding.right;"
+        "  const hgt=canvas.height-padding.top-padding.bottom;"
+        "  const xsVals=points.map(p=>p[0]);"
+        "  const ysVals=points.map(p=>p[1]);"
+        "  const minY=Math.min(...ysVals);"
+        "  const maxY=Math.max(...ysVals);"
+        "  const yRange=(maxY-minY)||1;"
+        "  const minX=Math.min(...xsVals);"
+        "  const maxX=Math.max(...xsVals);"
+        "  const xMin=useLog?Math.log10(minX):minX;"
+        "  const xMax=useLog?Math.log10(maxX):maxX;"
+        "  const xRange=(xMax-xMin)||1;"
+        "  ctx.clearRect(0,0,canvas.width,canvas.height);"
+        "  ctx.strokeStyle='#ccc'; ctx.lineWidth=1;"
+        "  ctx.beginPath(); ctx.moveTo(padding.left,padding.top); ctx.lineTo(padding.left,padding.top+hgt); ctx.stroke();"
+        "  ctx.beginPath(); ctx.moveTo(padding.left,padding.top+hgt); ctx.lineTo(padding.left+w,padding.top+hgt); ctx.stroke();"
+        "  ctx.strokeStyle='#1f77b4'; ctx.lineWidth=1.5;"
+        "  ctx.beginPath();"
+        "  points.forEach((p,idx)=>{"
+        "    const rawX=useLog?Math.log10(p[0]):p[0];"
+        "    const x=padding.left+((rawX-xMin)/xRange)*w;"
+        "    const y=padding.top+((maxY-p[1])/yRange)*hgt;"
+        "    if(idx===0){ctx.moveTo(x,y);}else{ctx.lineTo(x,y);}"
+        "  });"
+        "  ctx.stroke();"
+        "  ctx.fillStyle='#666'; ctx.font='11px Arial,Helvetica,sans-serif';"
+        "  ctx.fillText(formatNumber(maxY)+(units?` ${units}`:''),4,padding.top+8);"
+        "  ctx.fillText(formatNumber(minY)+(units?` ${units}`:''),4,padding.top+hgt);"
+        "  const note=document.createElement('div');"
+        "  note.className='viewer-note';"
+        "  const xLabel=useLog?'log10 Hz':'Hz';"
+        "  note.textContent=`${xLabel}, min ${formatNumber(minY)}${units?` ${units}`:''}, max ${formatNumber(maxY)}${units?` ${units}`:''}`;"
+        "  wrapper.appendChild(note);"
+        "  container.appendChild(wrapper);"
+        "}"
         "function renderDetails(j,name){"
         "  const status=j.decisions?.overall_status||'unknown';"
         "  const conf=j.confidence?.status||'unknown';"
+        "  const inputPath=j.input?.path||'';"
+        "  const duration=j.input?.duration_s;"
+        "  const durationText=Number.isFinite(duration)?`${duration.toFixed(2)} s`:'n/a';"
         "  const notes=[];"
         "  const bands=j.decisions?.band_decisions||[];"
         "  for(const bd of bands){"
@@ -612,59 +761,58 @@ def _render_qcreport_viewer_section() -> tuple[str, str, str]:
         "  details.innerHTML = `"
         "    <strong>${escapeHtml(name)}</strong><br>"
         "    Status: <span class='status ${status}'>${status}</span><br>"
-        "    Confidence: ${conf}<br><br>"
+        "    Confidence: ${conf}<br>"
+        "    Duration: ${durationText}<br>"
+        "    <span class='viewer-note'>${escapeHtml(inputPath)}</span><br><br>"
         "    <strong>Notable notes</strong><ul>${notes.slice(0,10).map(n=>`<li>${escapeHtml(n)}</li>`).join('')||'<li>None</li>'}</ul>"
         "  `;"
         "  charts.innerHTML='';"
-        "  const bandMetrics=j.band_metrics||[];"
-        "  const bandLabels=[];"
-        "  const meanValues=[];"
-        "  const maxValues=[];"
-        "  const varValues=[];"
+        "  const metrics=j.metrics||{};"
+        "  const grid=metrics.frequency_grid?.freqs_hz||[];"
+        "  const ltpsd=metrics.ltpsd?.mean_db||[];"
+        "  const deviation=metrics.deviation?.delta_mean_db||[];"
+        "  if(grid.length && ltpsd.length){"
+        "    renderLineChart(charts,'LTPSD Mean',grid,ltpsd,'dB',true);"
+        "  }"
+        "  if(grid.length && deviation.length){"
+        "    renderLineChart(charts,'Deviation Curve',grid,deviation,'dB',true);"
+        "  }"
+        "  const bandMetrics=metrics.band_metrics||[];"
+        "  const meanLabels=[]; const meanValues=[];"
+        "  const maxLabels=[]; const maxValues=[];"
+        "  const varLabels=[]; const varValues=[];"
         "  for(const bm of bandMetrics){"
         "    const label=bm.band_name||'band';"
-        "    if(Number.isFinite(bm.mean_deviation_db)){"
-        "      bandLabels.push(label);"
-        "      meanValues.push(bm.mean_deviation_db);"
-        "    }"
+        "    if(Number.isFinite(bm.mean_deviation_db)){meanLabels.push(label); meanValues.push(bm.mean_deviation_db);}"
+        "    if(Number.isFinite(bm.max_deviation_db)){maxLabels.push(label); maxValues.push(bm.max_deviation_db);}"
+        "    if(Number.isFinite(bm.variance_ratio)){varLabels.push(label); varValues.push(bm.variance_ratio);}"
         "  }"
-        "  if(meanValues.length){"
-        "    renderBarChart(charts,'Band Mean Deviation',bandLabels,meanValues,'dB');"
-        "  }"
-        "  const bandLabelsMax=[];"
-        "  for(const bm of bandMetrics){"
-        "    const label=bm.band_name||'band';"
-        "    if(Number.isFinite(bm.max_deviation_db)){"
-        "      bandLabelsMax.push(label);"
-        "      maxValues.push(bm.max_deviation_db);"
-        "    }"
-        "  }"
-        "  if(maxValues.length){"
-        "    renderBarChart(charts,'Band Max Deviation',bandLabelsMax,maxValues,'dB');"
-        "  }"
-        "  const bandLabelsVar=[];"
-        "  for(const bm of bandMetrics){"
-        "    const label=bm.band_name||'band';"
-        "    if(Number.isFinite(bm.variance_ratio)){"
-        "      bandLabelsVar.push(label);"
-        "      varValues.push(bm.variance_ratio);"
-        "    }"
-        "  }"
-        "  if(varValues.length){"
-        "    renderBarChart(charts,'Band Variance Ratio',bandLabelsVar,varValues,'');"
-        "  }"
-        "  const gm=j.global_metrics||{};"
-        "  const gLabels=[];"
-        "  const gValues=[];"
+        "  if(meanValues.length){renderBarChart(charts,'Band Mean Deviation',meanLabels,meanValues,'dB');}"
+        "  if(maxValues.length){renderBarChart(charts,'Band Max Deviation',maxLabels,maxValues,'dB');}"
+        "  if(varValues.length){renderBarChart(charts,'Band Variance Ratio',varLabels,varValues,'');}"
+        "  const gm=metrics.global_metrics||{};"
+        "  const gLabels=[]; const gValues=[];"
+        "  const gUnitsMap={spectral_tilt_db_per_oct:'dB/oct',tilt_deviation_db_per_oct:'dB/oct',true_peak_dbtp:'dBTP'};"
         "  for(const [key,val] of Object.entries(gm)){"
-        "    if(Number.isFinite(val)){"
-        "      gLabels.push(key);"
-        "      gValues.push(val);"
-        "    }"
+        "    if(Number.isFinite(val)){gLabels.push(key); gValues.push(val);}"
         "  }"
         "  if(gValues.length){"
-        "    renderBarChart(charts,'Global Metrics',gLabels,gValues,'');"
+        "    const units=gLabels.length===1?gUnitsMap[gLabels[0]]||'':'';"
+        "    renderBarChart(charts,'Global Metrics',gLabels,gValues,units);"
         "  }"
+        "}"
+        "document.querySelectorAll('[data-report-href]').forEach((btn)=>{"
+        "  btn.addEventListener('click',()=>{"
+        "    const href=btn.getAttribute('data-report-href');"
+        "    const label=btn.getAttribute('data-report-label')||href;"
+        "    loadReportFromUrl(href,label);"
+        "  });"
+        "});"
+        "const firstBatch=document.querySelector('[data-report-href]');"
+        "if(firstBatch){"
+        "  const href=firstBatch.getAttribute('data-report-href');"
+        "  const label=firstBatch.getAttribute('data-report-label')||href;"
+        "  loadReportFromUrl(href,label);"
         "}"
         "</script>"
     )
@@ -1252,6 +1400,21 @@ def cmd_batch(args) -> int:
             return EXIT_BAD_ARGS
 
         out_dir = Path(args.out_dir) if args.out_dir else None
+        report_outputs_requested = any([
+            args.summary_json,
+            args.summary_md,
+            args.report_md,
+            args.report_html,
+            args.repro_md
+        ])
+        if report_outputs_requested and out_dir is None:
+            print(
+                "Error: --out-dir is required when writing batch reports so outputs live alongside QC reports.",
+                file=sys.stderr
+            )
+            return EXIT_BAD_ARGS
+        if report_outputs_requested and out_dir:
+            out_dir.mkdir(parents=True, exist_ok=True)
         max_workers = max(1, int(args.workers))
         max_workers = min(max_workers, len(audio_paths))
 
@@ -1283,41 +1446,76 @@ def cmd_batch(args) -> int:
                         print(f"[OK] {audio_path}: {status}")
 
         summary = _aggregate_batch_results(results)
-        if args.summary_json:
-            Path(args.summary_json).write_text(
+        summary_json_path = _resolve_report_output_path(
+            out_dir,
+            args.summary_json,
+            "batch-summary.json"
+        )
+        if summary_json_path:
+            summary_json_path.write_text(
                 json.dumps(summary, indent=2),
                 encoding="utf-8"
             )
-        if args.summary_md:
-            Path(args.summary_md).write_text(
+        summary_md_path = _resolve_report_output_path(
+            out_dir,
+            args.summary_md,
+            "batch-summary.md"
+        )
+        if summary_md_path:
+            summary_md_path.write_text(
                 _render_markdown_summary(summary),
                 encoding="utf-8"
             )
-        if args.report_md:
-            Path(args.report_md).write_text(
-                _render_corpus_report_md(summary, profile_path=args.profile, mode=args.mode),
+        report_md_path = _resolve_report_output_path(
+            out_dir,
+            args.report_md,
+            "batch-report.md"
+        )
+        if report_md_path:
+            report_md_path.write_text(
+                _render_corpus_report_md(
+                    summary,
+                    profile_path=args.profile,
+                    mode=args.mode
+                ),
                 encoding="utf-8"
             )
-        if args.report_html:
-            report_html_path = Path(args.report_html)
+        report_html_path = _resolve_report_output_path(
+            out_dir,
+            args.report_html,
+            "batch-report.html"
+        )
+        if report_html_path:
             file_links = None
+            embedded_reports = None
             if out_dir:
                 file_links = []
+                embedded_reports = {}
                 for audio_path, status, err, _ in results:
                     label = Path(audio_path).name
                     link_path = _output_path(out_dir, Path(audio_path))
                     href = os.path.relpath(link_path, report_html_path.parent)
                     file_links.append((label, status, href))
+                for audio_path, _, _, report in results:
+                    if report:
+                        label = Path(audio_path).name
+                        embedded_reports[label] = report
             report_html_path.write_text(
                 _render_corpus_report_html(
                     summary,
                     profile_path=args.profile,
                     mode=args.mode,
-                    file_links=file_links
+                    file_links=file_links,
+                    embedded_reports=embedded_reports
                 ),
                 encoding="utf-8"
             )
-        if args.repro_md:
+        repro_md_path = _resolve_report_output_path(
+            out_dir,
+            args.repro_md,
+            "batch-repro.md"
+        )
+        if repro_md_path:
             profile = load_reference_profile(args.profile)
             algo_registry = build_algorithm_registry(
                 analysis_lock=profile.analysis_lock or {},
@@ -1325,7 +1523,7 @@ def cmd_batch(args) -> int:
                 channel_policy=str(profile.analysis_lock.get("channel_policy", "mono"))
             )
             algo_ids = algorithm_ids_from_registry(algo_registry)
-            Path(args.repro_md).write_text(
+            repro_md_path.write_text(
                 _render_repro_doc(
                     profile=profile,
                     algorithm_ids=algo_ids,
@@ -1454,23 +1652,28 @@ def main():
     )
     batch_parser.add_argument(
         "--summary-json",
-        help="Output path for batch summary JSON"
+        default="batch-summary.json",
+        help="Batch summary JSON filename (default: batch-summary.json in --out-dir)"
     )
     batch_parser.add_argument(
         "--summary-md",
-        help="Output path for batch summary Markdown"
+        default="batch-summary.md",
+        help="Batch summary Markdown filename (default: batch-summary.md in --out-dir)"
     )
     batch_parser.add_argument(
         "--report-md",
-        help="Output path for one-page batch report Markdown"
+        default="batch-report.md",
+        help="One-page batch report Markdown filename (default: batch-report.md in --out-dir)"
     )
     batch_parser.add_argument(
         "--report-html",
-        help="Output path for one-page batch report HTML"
+        default="batch-report.html",
+        help="One-page batch report HTML filename (default: batch-report.html in --out-dir)"
     )
     batch_parser.add_argument(
         "--repro-md",
-        help="Output path for reproducibility Markdown"
+        default="batch-repro.md",
+        help="Reproducibility Markdown filename (default: batch-repro.md in --out-dir)"
     )
     batch_parser.add_argument(
         "--recursive",
