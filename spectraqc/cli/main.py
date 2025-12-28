@@ -426,24 +426,6 @@ def _render_corpus_report_html(
         _svg_bar("fail", conf.get("fail", 0), conf_total, "#e53935"),
     ])
 
-    file_list_html = ""
-    if file_links:
-        rows = []
-        for label, status, href in file_links:
-            rows.append(
-                "<tr>"
-                f"<td class='file'>{label}</td>"
-                f"<td class='status {status}'>{status}</td>"
-                f"<td><a href='{href}'>report</a></td>"
-                "</tr>"
-            )
-        file_list_html = (
-            "<div class='section'><h2>Per-Track Reports</h2>"
-            "<table><thead><tr><th>File</th><th>Status</th><th>QCReport</th></tr></thead><tbody>"
-            + "".join(rows) +
-            "</tbody></table></div>"
-        )
-
     embedded_reports = embedded_reports or {}
     embedded_reports_json = json.dumps(embedded_reports, ensure_ascii=True).replace("</", "<\\/")
     viewer_section_html, viewer_section_css, viewer_section_js = _render_qcreport_viewer_section(
@@ -487,7 +469,6 @@ def _render_corpus_report_html(
         "<div class='section'><h2>Notable Failures</h2><ul>"
         f"{top_causes}</ul></div>"
         f"{viewer_section_html}"
-        f"{file_list_html}"
         f"{viewer_section_js}"
         "</body></html>"
     )
@@ -498,37 +479,17 @@ def _render_qcreport_viewer_section(
     embedded_reports_json: str
 ) -> tuple[str, str, str]:
     """Render an embedded GUI viewer for QCReport JSON files."""
-    batch_table_html = ""
-    file_input_class = ""
+    file_input_class = " viewer-hidden" if file_links else ""
+    batch_reports_json = "[]"
     if file_links:
-        rows = []
-        for label, status, href in file_links:
-            rows.append(
-                "<tr>"
-                f"<td class='file'>{label}</td>"
-                f"<td class='status {status}'>{status}</td>"
-                f"<td><button class='viewer-load' data-report-href='{href}' "
-                f"data-report-label='{label}'>Load</button></td>"
-                "</tr>"
-            )
-        batch_table_html = (
-            "<div class='viewer-batch'>"
-            "<h4>Batch Reports</h4>"
-            "<table id='viewer-batch-list'><thead><tr>"
-            "<th>File</th><th>Status</th><th>Load</th>"
-            "</tr></thead><tbody>"
-            + "".join(rows) +
-            "</tbody></table>"
-            "</div>"
-        )
-        file_input_class = " viewer-hidden"
+        batch_reports = [{"label": label, "href": href} for label, _, href in file_links]
+        batch_reports_json = json.dumps(batch_reports, ensure_ascii=True).replace("</", "<\\/")
 
     viewer_html = (
         "<div class='section' id='viewer'>"
         "<h2>Report Viewer</h2>"
         "<div class='viewer-row' style='margin-top:16px'>"
         "<div class='viewer-panel'><h3>Reports</h3>"
-        f"{batch_table_html}"
         f"<div id='viewer-file-input' class='viewer-file-input{file_input_class}'>"
         "<p>Select one or more <code>.qcreport.json</code> files.</p>"
         "<input id='viewer-files' type='file' multiple accept='.json'>"
@@ -542,6 +503,15 @@ def _render_qcreport_viewer_section(
         "<div id='viewer-charts'></div>"
         "</div>"
         "</div>"
+        "<div id='viewer-overlay' class='viewer-overlay' aria-hidden='true'>"
+        "<div class='viewer-overlay-inner'>"
+        "<div class='viewer-overlay-header'>"
+        "<h3 id='viewer-overlay-title'>Chart</h3>"
+        "<button id='viewer-overlay-close' class='viewer-overlay-close' type='button'>Close</button>"
+        "</div>"
+        "<div id='viewer-overlay-body' class='viewer-overlay-body'></div>"
+        "</div>"
+        "</div>"
         "</div>"
     )
     viewer_css = (
@@ -549,16 +519,24 @@ def _render_qcreport_viewer_section(
         ".viewer-panel{flex:1;min-width:320px;border:1px solid #eee;padding:12px;border-radius:8px}"
         ".viewer-file-input{margin-bottom:12px}"
         ".viewer-file-input.viewer-hidden{display:none}"
-        ".viewer-batch{margin-bottom:12px}"
-        "#viewer-list,#viewer-batch-list{border-collapse:collapse;width:100%;font-size:14px}"
-        "#viewer-list th,#viewer-list td,#viewer-batch-list th,#viewer-batch-list td{border-bottom:1px solid #eee;padding:6px 8px;text-align:left}"
-        ".viewer-load{border:1px solid #ddd;background:#fafafa;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px}"
-        ".viewer-load:hover{background:#f0f0f0}"
+        "#viewer-list{border-collapse:collapse;width:100%;font-size:14px}"
+        "#viewer-list th,#viewer-list td{border-bottom:1px solid #eee;padding:6px 8px;text-align:left}"
         "#viewer-charts{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}"
         ".viewer-chart{border:1px solid #f0f0f0;padding:8px;border-radius:6px}"
         ".viewer-chart h3{margin:4px 0 8px 0;font-size:14px}"
         ".viewer-chart canvas{width:100%;height:auto}"
+        ".viewer-expand{margin-top:6px;border:1px solid #ddd;background:#fafafa;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px}"
+        ".viewer-expand:hover{background:#f0f0f0}"
         ".viewer-note{color:#555;margin-top:6px;font-size:12px}"
+        ".viewer-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center;z-index:9999}"
+        ".viewer-overlay.active{display:flex}"
+        ".viewer-overlay-inner{background:#fff;border-radius:10px;max-width:96vw;max-height:92vh;width:100%;padding:12px;box-shadow:0 10px 40px rgba(0,0,0,0.35);display:flex;flex-direction:column}"
+        ".viewer-overlay-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}"
+        ".viewer-overlay-header h3{margin:0;font-size:16px}"
+        ".viewer-overlay-close{border:1px solid #ddd;background:#fafafa;border-radius:4px;padding:6px 10px;cursor:pointer;font-size:12px}"
+        ".viewer-overlay-close:hover{background:#f0f0f0}"
+        ".viewer-overlay-body{flex:1;display:flex;align-items:center;justify-content:center;overflow:auto}"
+        ".viewer-overlay-body img{max-width:100%;max-height:100%;height:auto}"
     )
     viewer_js = (
         "<script>"
@@ -567,8 +545,34 @@ def _render_qcreport_viewer_section(
         "const listBody=document.querySelector('#viewer-list tbody');"
         "const details=document.getElementById('viewer-details');"
         "const charts=document.getElementById('viewer-charts');"
+        "const overlay=document.getElementById('viewer-overlay');"
+        "const overlayBody=document.getElementById('viewer-overlay-body');"
+        "const overlayTitle=document.getElementById('viewer-overlay-title');"
+        "const overlayClose=document.getElementById('viewer-overlay-close');"
         "const reportCache=new Map();"
+        f"const batchReports={batch_reports_json};"
         f"const embeddedReports={embedded_reports_json};"
+        "function closeOverlay(){"
+        "  overlay.classList.remove('active');"
+        "  overlay.setAttribute('aria-hidden','true');"
+        "  overlayBody.innerHTML='';"
+        "}"
+        "function openOverlayFromCanvas(canvas,title){"
+        "  const img=document.createElement('img');"
+        "  img.src=canvas.toDataURL('image/png');"
+        "  overlayBody.innerHTML='';"
+        "  overlayBody.appendChild(img);"
+        "  overlayTitle.textContent=title||'Chart';"
+        "  overlay.classList.add('active');"
+        "  overlay.setAttribute('aria-hidden','false');"
+        "}"
+        "overlayClose.addEventListener('click',closeOverlay);"
+        "overlay.addEventListener('click',(e)=>{"
+        "  if(e.target===overlay){closeOverlay();}"
+        "});"
+        "document.addEventListener('keydown',(e)=>{"
+        "  if(e.key==='Escape'){closeOverlay();}"
+        "});"
         "function escapeHtml(value){"
         "  const map={'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'};"
         "  return String(value).replace(/[&<>\"']/g,(c)=>map[c]);"
@@ -606,14 +610,12 @@ def _render_qcreport_viewer_section(
         "  }"
         "});"
         "async function loadReportFromUrl(url,label){"
-        "  details.textContent=`Loading ${label}...`;"
         "  if(embeddedReports && embeddedReports[label]){"
         "    const j=embeddedReports[label];"
         "    const status=j.decisions?.overall_status||'unknown';"
         "    const conf=j.confidence?.status||'unknown';"
         "    reportCache.set(label,j);"
         "    appendLoadedRow(label,status,conf,j);"
-        "    renderDetails(j,label);"
         "    return;"
         "  }"
         "  try{"
@@ -624,11 +626,16 @@ def _render_qcreport_viewer_section(
         "    const conf=j.confidence?.status||'unknown';"
         "    reportCache.set(label,j);"
         "    appendLoadedRow(label,status,conf,j);"
-        "    renderDetails(j,label);"
         "  }catch(err){"
-        "    details.textContent=`Failed to load ${label}: ${err}`;"
         "    if(fileInputWrap){fileInputWrap.classList.remove('viewer-hidden');}"
         "  }"
+        "}"
+        "async function loadAllBatchReports(){"
+        "  if(!batchReports.length){return;}"
+        "  const tasks=batchReports.map((item)=>loadReportFromUrl(item.href,item.label));"
+        "  await Promise.allSettled(tasks);"
+        "  const first=listBody.querySelector('tr');"
+        "  if(first){first.click();}"
         "}"
         "function renderBarChart(container,title,labels,values,units){"
         "  if(!labels.length||!values.length) return;"
@@ -677,7 +684,13 @@ def _render_qcreport_viewer_section(
         "  const note=document.createElement('div');"
         "  note.className='viewer-note';"
         "  note.textContent=`min ${formatNumber(minVal)}${units?` ${units}`:''}, max ${formatNumber(maxVal)}${units?` ${units}`:''}`;"
+        "  const expand=document.createElement('button');"
+        "  expand.className='viewer-expand';"
+        "  expand.type='button';"
+        "  expand.textContent='Full screen';"
+        "  expand.addEventListener('click',()=>openOverlayFromCanvas(canvas,title));"
         "  wrapper.appendChild(note);"
+        "  wrapper.appendChild(expand);"
         "  container.appendChild(wrapper);"
         "}"
         "function renderLineChart(container,title,xs,ys,units,useLog){"
@@ -733,7 +746,13 @@ def _render_qcreport_viewer_section(
         "  note.className='viewer-note';"
         "  const xLabel=useLog?'log10 Hz':'Hz';"
         "  note.textContent=`${xLabel}, min ${formatNumber(minY)}${units?` ${units}`:''}, max ${formatNumber(maxY)}${units?` ${units}`:''}`;"
+        "  const expand=document.createElement('button');"
+        "  expand.className='viewer-expand';"
+        "  expand.type='button';"
+        "  expand.textContent='Full screen';"
+        "  expand.addEventListener('click',()=>openOverlayFromCanvas(canvas,title));"
         "  wrapper.appendChild(note);"
+        "  wrapper.appendChild(expand);"
         "  container.appendChild(wrapper);"
         "}"
         "function renderDetails(j,name){"
@@ -801,19 +820,7 @@ def _render_qcreport_viewer_section(
         "    renderBarChart(charts,'Global Metrics',gLabels,gValues,units);"
         "  }"
         "}"
-        "document.querySelectorAll('[data-report-href]').forEach((btn)=>{"
-        "  btn.addEventListener('click',()=>{"
-        "    const href=btn.getAttribute('data-report-href');"
-        "    const label=btn.getAttribute('data-report-label')||href;"
-        "    loadReportFromUrl(href,label);"
-        "  });"
-        "});"
-        "const firstBatch=document.querySelector('[data-report-href]');"
-        "if(firstBatch){"
-        "  const href=firstBatch.getAttribute('data-report-href');"
-        "  const label=firstBatch.getAttribute('data-report-label')||href;"
-        "  loadReportFromUrl(href,label);"
-        "}"
+        "loadAllBatchReports();"
         "</script>"
     )
     return viewer_html, viewer_css, viewer_js
