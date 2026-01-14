@@ -204,8 +204,6 @@ def evaluate(
         )
         if tp_stat == Status.FAIL:
             any_fail = True
-        elif tp_stat == Status.WARN:
-            warn_count += 1
 
     # Overall status determination
     warn_threshold = thresholds.get("warn_if_warn_band_count_at_least", 2)

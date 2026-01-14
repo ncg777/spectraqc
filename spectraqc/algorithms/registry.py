@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 LOUDNESS_ALGO_ID = "bs1770-4-ffmpeg-ebur128-lufs"
-TRUE_PEAK_ALGO_ID = "bs1770-4-ffmpeg-ebur128-tp4x"
+TRUE_PEAK_ALGO_ID = "true_peak_kaiser_sinc_4x_v1"
 
 
 def build_algorithm_registry(
@@ -26,6 +26,15 @@ def build_algorithm_registry(
             "params": {
                 "type": "octave_fraction",
                 "octave_fraction": float(smoothing_cfg.get("octave_fraction", 1 / 6)),
+                "min_hz": 20.0
+            }
+        }
+    elif smoothing_type == "log_hz":
+        smoothing_entry = {
+            "id": "smoothing_log_hz_v1",
+            "params": {
+                "type": "log_hz",
+                "bins_per_octave": int(smoothing_cfg.get("log_hz_bins_per_octave", 12)),
                 "min_hz": 20.0
             }
         }
@@ -87,8 +96,8 @@ def build_algorithm_registry(
         TRUE_PEAK_ALGO_ID: {
             "id": TRUE_PEAK_ALGO_ID,
             "params": {
-                "standard": "bs1770-4",
-                "backend": "ffmpeg_ebur128",
+                "standard": "kaiser_sinc",
+                "backend": "internal",
                 "oversample": 4
             }
         },

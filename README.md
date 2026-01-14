@@ -84,7 +84,7 @@ For each band:
 - Spectral tilt: linear regression of dB vs log2(f) from 50 Hz to 16 kHz.
 - Tilt deviation: input tilt minus reference tilt.
 - True peak: 4x oversampled reconstruction with Kaiser-windowed sinc FIR.
-- Integrated loudness (LUFS): ITU-R BS.1770 via `pyloudnorm` when available; otherwise recorded as unavailable.
+- Integrated loudness (LUFS): ITU-R BS.1770 via ffmpeg `ebur128` when available; otherwise recorded as unavailable.
 
 10) Threshold evaluation
 Apply profile thresholds to band and global metrics. See Decision logic below.
@@ -339,7 +339,7 @@ Options:
   - Usefulness: provides contextual classification for consumers.
 
 ## Known limitations
-- Loudness measurement depends on the optional `pyloudnorm` library. If it is not installed, LUFS is reported as unavailable.
+- Loudness measurement depends on `ffmpeg` (via `ebur128`). If it is not installed, LUFS is reported as unavailable.
 - MP3 decoding requires either `soundfile` support or `ffmpeg` on the system.
 - Confidence modeling is conservative and based on decode and silence checks only.
 
@@ -349,5 +349,6 @@ Options:
 - Profile versioning rules: `docs/profile_versioning.md`
 - Reference profile schema: `docs/reference_profile_v2.schema.json`
 - Corpus manifest schema: `docs/corpus_manifest_v1.schema.json`
-
-
+- User guide: `docs/USER_GUIDE.md`
+- CLI reference: `docs/CLI_REFERENCE.md`
+- Onboarding workshop deck: `docs/ONBOARDING_WORKSHOP.md`

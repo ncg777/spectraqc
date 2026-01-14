@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SpectraQC — Deterministic Audio Spectral QC</title>
+    <style>
+      body { font-family: "Helvetica Neue", Arial, sans-serif; margin: 32px; color: #1f2933; line-height: 1.6; }
+      h1, h2, h3 { color: #102a43; margin-bottom: 8px; }
+      .tagline { font-size: 1.1rem; color: #52606d; margin-bottom: 18px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+      .card { border: 1px solid #e0e0e0; border-radius: 12px; padding: 16px; background: #fafafa; }
+      .price { font-size: 1.3rem; font-weight: 700; margin-top: 8px; }
+      .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #e6f6ff; color: #0077b6; font-size: 0.85rem; margin-right: 6px; }
+      .section { margin: 24px 0; }
+      .divider { height: 1px; background: #e0e0e0; margin: 28px 0; }
+      ul { margin: 8px 0 0 18px; }
+      .footer { font-size: 0.85rem; color: #7b8794; margin-top: 18px; }
+    </style>
+  </head>
+  <body>
+    <h1>SpectraQC</h1>
+    <div class="tagline">
+      Deterministic spectral quality control for audio archives, broadcasters, and public institutions.
+    </div>
+
+    <div class="section">
+      <span class="pill">Audit-ready</span>
+      <span class="pill">Deterministic</span>
+      <span class="pill">Batch-scale</span>
+      <span class="pill">Vendor-neutral</span>
+    </div>
+
+    <div class="section">
+      <h2>English — Why Spectral QC Is Necessary</h2>
+      <p>
+        SpectraQC is not about making content sound identical. It is about detecting technical faults and drift in
+        capture, transfer, and encoding chains. Missing low‑end, excessive high‑frequency attenuation, or unexpected
+        band energy often indicates equipment issues, mis‑applied filters, or inconsistent ingest settings.
+        SpectraQC provides a deterministic way to verify that assets meet an institutional technical mandate.
+      </p>
+      <h2>English — Why Canadian Institutions Choose SpectraQC</h2>
+      <p>
+        When the mandate is preservation, compliance, and repeatability, you need more than a subjective listen.
+        SpectraQC delivers deterministic spectral measurements with structured reports that can be re-run years later
+        and yield the same decision outcomes. That makes it a natural fit for libraries, archives, public broadcasters,
+        and universities across Canada—especially teams that must demonstrate evidence-based QC in audits or public records.
+      </p>
+      <div class="grid">
+        <div class="card">
+          <h3>Evidence you can defend</h3>
+          <ul>
+            <li>Hash-verified reports for long-term traceability.</li>
+            <li>Clear PASS/WARN/FAIL metrics per band and globally.</li>
+            <li>Reproducibility documents for re-runs and audits.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Practical at scale</h3>
+          <ul>
+            <li>Batch processing for large collections and migrations.</li>
+            <li>One-page HTML reports to share across teams.</li>
+            <li>Lightweight CLI for automation and CI pipelines.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Built for public-sector workflows</h3>
+          <ul>
+            <li>Deterministic outputs support procurement and compliance checks.</li>
+            <li>Profiles allow standardized QC across programs and departments.</li>
+            <li>Transparent algorithm registry for internal review.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section">
+      <h2>Français — Pourquoi le QC spectral est nécessaire</h2>
+      <p>
+        SpectraQC ne cherche pas à rendre les contenus identiques. L’objectif est de détecter les défauts techniques
+        et les dérives dans les chaînes de capture, de transfert et d’encodage. Une perte de graves, une atténuation
+        excessive des aigus ou une énergie de bande inattendue signalent souvent un problème de matériel, de filtre
+        ou de paramètres d’ingestion. SpectraQC fournit une vérification déterministe conforme aux mandats institutionnels.
+      </p>
+      <h2>Français — Pourquoi les institutions canadiennes choisissent SpectraQC</h2>
+      <p>
+        Quand le mandat exige la conservation, la conformité et la reproductibilité, l’écoute subjective ne suffit pas.
+        SpectraQC fournit des mesures spectrales déterministes et des rapports structurés, réexécutables des années plus tard
+        avec le même verdict. C’est une solution idéale pour les bibliothèques, archives, diffuseurs publics et universités
+        du Québec et du Canada qui doivent démontrer une qualité vérifiable.
+      </p>
+      <div class="grid">
+        <div class="card">
+          <h3>Une preuve robuste et traçable</h3>
+          <ul>
+            <li>Rapports hachés pour une traçabilité à long terme.</li>
+            <li>Décisions PASS/WARN/FAIL par bande et globales.</li>
+            <li>Documentation de reproductibilité pour audits.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Conçu pour les volumes institutionnels</h3>
+          <ul>
+            <li>Traitement par lot pour les grandes collections.</li>
+            <li>Rapports HTML synthétiques faciles à partager.</li>
+            <li>CLI léger pour automatisation et CI.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Adapté aux exigences publiques</h3>
+          <ul>
+            <li>Résultats déterministes compatibles avec les exigences d’approvisionnement.</li>
+            <li>Profils standardisés pour harmoniser les programmes.</li>
+            <li>Registre d’algorithmes transparent.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section">
+      <h2>Pricing (CAD)</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Standard Institutional License</h3>
+          <p>Up to 5 analysts, 1 production environment, email support.</p>
+          <div class="price">$12,000 / year</div>
+        </div>
+        <div class="card">
+          <h3>Enterprise &amp; Provincial Programs</h3>
+          <p>Unlimited analysts, multi-site deployment, priority support, onboarding workshop.</p>
+          <div class="price">$28,000 / year</div>
+        </div>
+        <div class="card">
+          <h3>Perpetual Archive License</h3>
+          <p>One-time fee for long-term digital preservation mandates.</p>
+          <div class="price">$45,000 one-time</div>
+        </div>
+      </div>
+      <p class="footer">
+        Pricing reflects typical Canadian institutional procurement ranges for specialized QC tooling. It covers
+        deterministic reporting, batch automation, and audit support—costs that are often higher when done manually.
+        Volume and provincial procurement agreements are available.
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>Next Steps</h2>
+      <p>
+        Deploy SpectraQC alongside your existing ingestion or migration pipelines. We provide a quick-start profile,
+        onboarding templates, and optional training to help your teams align on spectral QC standards from day one.
+      </p>
+    </div>
+  </body>
+</html>
