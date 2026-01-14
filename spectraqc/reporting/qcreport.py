@@ -23,7 +23,10 @@ def build_qcreport_dict(
     global_metrics: dict,
     decisions: dict,
     confidence: dict,
-    repair: dict | None = None
+    repair: dict | None = None,
+    cohort_id: str | None = None,
+    department: str | None = None,
+    campaign: str | None = None
 ) -> dict:
     """
     Build a QCReport dictionary with proper quantization and integrity hash.
@@ -80,6 +83,15 @@ def build_qcreport_dict(
 
     if repair is not None:
         report["repair"] = repair
+
+    cohort_meta = {
+        "cohort_id": cohort_id,
+        "department": department,
+        "campaign": campaign
+    }
+    cohort_meta = {k: v for k, v in cohort_meta.items() if v}
+    if cohort_meta:
+        report["cohort"] = cohort_meta
 
     # Quantize for stable hashing
     if "normalization" in report.get("analysis", {}):
