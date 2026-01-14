@@ -118,6 +118,10 @@ def validate_reference_profile_dict(j: dict) -> None:
         oct_frac = smoothing.get("octave_fraction")
         if not _is_number(oct_frac) or oct_frac <= 0:
             err("analysis_lock.smoothing.octave_fraction must be > 0.")
+    if smoothing.get("type") == "log_hz":
+        bins = smoothing.get("log_hz_bins_per_octave")
+        if not isinstance(bins, int) or bins <= 0:
+            err("analysis_lock.smoothing.log_hz_bins_per_octave must be a positive int.")
 
     normalization = analysis_lock.get("normalization", {})
     loud = normalization.get("loudness", {})

@@ -18,7 +18,7 @@ from spectraqc.types import Status, GlobalMetrics
 from spectraqc.io.audio import load_audio, apply_channel_policy
 from spectraqc.analysis.ltpsd import compute_ltpsd
 from spectraqc.metrics.grid import interp_to_grid, interp_var_ratio
-from spectraqc.metrics.smoothing import smooth_octave_fraction
+from spectraqc.metrics.smoothing import smooth_octave_fraction, smooth_log_hz
 from spectraqc.metrics.deviation import deviation_curve_db
 from spectraqc.metrics.integration import band_metrics
 from spectraqc.metrics.tilt import spectral_tilt_db_per_oct
@@ -1034,6 +1034,8 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
     }
     if smoothing_cfg.get("type") == "octave_fraction":
         required_ids.add("smoothing_octave_fraction_v1")
+    elif smoothing_cfg.get("type") == "log_hz":
+        required_ids.add("smoothing_log_hz_v1")
     else:
         required_ids.add("smoothing_none_v1")
     missing_ids = sorted(required_ids.difference(set(algo_ids)))
@@ -1073,6 +1075,13 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
         if smoothing_cfg.get("type") == "octave_fraction":
             oct_frac = smoothing_cfg.get("octave_fraction", 1/6)
             input_mean_db = smooth_octave_fraction(profile.freqs_hz, input_mean_db, oct_frac)
+        elif smoothing_cfg.get("type") == "log_hz":
+            bins_per_oct = smoothing_cfg.get("log_hz_bins_per_octave", 12)
+            input_mean_db = smooth_log_hz(
+                profile.freqs_hz,
+                input_mean_db,
+                bins_per_octave=int(bins_per_oct)
+            )
 
         delta_db = deviation_curve_db(input_mean_db, profile.ref_mean_db)
 

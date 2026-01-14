@@ -32,7 +32,8 @@ def welch_psd_db(
     if nfft <= 0 or hop <= 0:
         raise ValueError("nfft and hop must be positive.")
     if len(x) < nfft:
-        raise ValueError("Signal too short for given nfft.")
+        pad = nfft - len(x)
+        x = np.pad(x, (0, pad), mode="constant")
 
     w = hann(nfft).astype(np.float64)
     U = window_power_norm(w)

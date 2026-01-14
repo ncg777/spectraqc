@@ -8,6 +8,14 @@ dependencies = [
   "soundfile>=0.12.1",
 ]
 
+[project.optional-dependencies]
+test = [
+  "pytest>=7.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [project.scripts]
 spectraqc = "spectraqc.cli.main:main"
 
