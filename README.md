@@ -198,6 +198,48 @@ Stdout/stderr discipline:
 - Purpose: produce a full QCReport for a single audio file.
 - Usefulness: yields a complete, structured report suitable for archival and audit.
 
+### `spectraqc repair`
+- Purpose: apply a composable repair plan to an audio file, emit repaired audio, and produce a QCReport with a `repair` section.
+- Usefulness: captures repair provenance (steps + parameters) alongside before/after metrics for audit trails.
+
+Usage:
+```
+spectraqc repair input.wav --profile path/to/profile.ref.json \
+  --repair-plan repair_plan.yaml --out repaired.wav --report repaired.qcreport.json
+```
+
+Repair plan schema (YAML or JSON):
+```
+steps:
+  - name: dehum
+    params:
+      hum_freq_hz: 60.0
+      harmonics: 5
+      bandwidth_hz: 1.0
+  - name: declick
+    params:
+      threshold_sigma: 6.0
+      window_ms: 1.0
+  - name: denoise
+    params:
+      frame_seconds: 0.1
+      attenuation_db: 6.0
+      threshold_db_offset: 3.0
+  - name: declip
+    params:
+      clip_threshold: 0.98
+  - name: loudness_normalize
+    params:
+      target_lufs_i: -24.0
+  - name: true_peak_limit
+    params:
+      max_dbtp: -1.0
+```
+
+Recommended presets:
+- **Preservation transfer (archival)**: `dehum` (50/60 Hz), `declick`, gentle `denoise`, and `true_peak_limit` at `-2.0 dBTP`.
+- **Access copy (streaming)**: `dehum`, `declick`, `denoise`, `loudness_normalize` to `-16 LUFS`, and `true_peak_limit` at `-1.0 dBTP`.
+
 Usage:
 ```
 spectraqc analyze <audio_path> --profile <ref.json> [options]

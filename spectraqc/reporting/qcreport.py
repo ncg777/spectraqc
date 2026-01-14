@@ -22,7 +22,8 @@ def build_qcreport_dict(
     band_metrics: list[dict],
     global_metrics: dict,
     decisions: dict,
-    confidence: dict
+    confidence: dict,
+    repair: dict | None = None
 ) -> dict:
     """
     Build a QCReport dictionary with proper quantization and integrity hash.
@@ -77,6 +78,9 @@ def build_qcreport_dict(
         }
     }
 
+    if repair is not None:
+        report["repair"] = repair
+
     # Quantize for stable hashing
     if "normalization" in report.get("analysis", {}):
         l = report["analysis"]["normalization"].get("loudness", {})
@@ -111,6 +115,17 @@ def build_qcreport_dict(
         gm["tilt_deviation_db_per_oct"] = q(float(gm["tilt_deviation_db_per_oct"]), 0.001)
     if "true_peak_dbtp" in gm:
         gm["true_peak_dbtp"] = q(float(gm["true_peak_dbtp"]), 0.01)
+
+    if report.get("repair"):
+        repair_metrics = report["repair"].get("metrics", {})
+        for key in ("before", "after", "delta"):
+            section = repair_metrics.get(key, {})
+            if "true_peak_dbtp" in section:
+                section["true_peak_dbtp"] = q(float(section["true_peak_dbtp"]), 0.01)
+            if "noise_floor_dbfs" in section:
+                section["noise_floor_dbfs"] = q(float(section["noise_floor_dbfs"]), 0.01)
+            if "deviation_curve_db" in section:
+                section["deviation_curve_db"] = q_list(section["deviation_curve_db"], 0.01)
 
     # Compute integrity hash (excluding integrity object itself)
     tmp = dict(report)

@@ -1,6 +1,8 @@
 """SpectraQC CLI - Spectral Quality Control Tool."""
 from __future__ import annotations
 import argparse
+import importlib
+import importlib.util
 import json
 import sys
 import platform
@@ -13,6 +15,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
+import soundfile as sf
 
 from spectraqc.version import __version__
 from spectraqc.types import Status, GlobalMetrics
@@ -25,6 +28,7 @@ from spectraqc.metrics.integration import band_metrics
 from spectraqc.metrics.tilt import spectral_tilt_db_per_oct
 from spectraqc.metrics.truepeak import true_peak_dbtp_mono
 from spectraqc.metrics.loudness import integrated_lufs_mono
+from spectraqc.dsp.repair import apply_repair_plan, compute_repair_metrics
 from spectraqc.algorithms.registry import (
     build_algorithm_registry,
     algorithm_ids_from_registry,
@@ -317,6 +321,29 @@ def _resolve_report_output_path(
     if not name:
         name = default_name
     return out_dir / name
+
+
+def _load_repair_plan(path: str) -> dict:
+    """Load a repair plan from JSON or YAML."""
+    plan_path = Path(path)
+    if not plan_path.exists():
+        raise FileNotFoundError(f"Repair plan not found: {path}")
+    raw = plan_path.read_text(encoding="utf-8")
+    try:
+        plan = json.loads(raw)
+    except json.JSONDecodeError:
+        if importlib.util.find_spec("yaml") is None:
+            raise ValueError("PyYAML is required for YAML repair plans.")
+        yaml = importlib.import_module("yaml")
+        try:
+            plan = yaml.safe_load(raw)
+        except Exception as exc:
+            raise ValueError(f"Failed to parse repair plan: {exc}") from exc
+    if not isinstance(plan, dict):
+        raise ValueError("Repair plan must be a mapping.")
+    if "steps" not in plan:
+        raise ValueError("Repair plan missing required 'steps' list.")
+    return plan
 
 
 def _batch_worker(
@@ -1158,7 +1185,13 @@ def _build_input_meta(audio_path: str, audio, fs: float, duration: float) -> dic
     }
 
 
-def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance"):
+def _analyze_audio(
+    audio_path: str,
+    profile_path: str,
+    mode: str = "compliance",
+    *,
+    repair: dict | None = None
+):
     """
     Run full analysis pipeline on audio file.
     
@@ -1466,10 +1499,81 @@ def _analyze_audio(audio_path: str, profile_path: str, mode: str = "compliance")
         band_metrics=band_metrics_list,
         global_metrics=global_metrics_dict,
         decisions=decisions_dict,
-        confidence=confidence
+        confidence=confidence,
+        repair=repair
     )
     
     return qcreport, decision, profile, algo_ids
+
+
+def cmd_repair(args) -> int:
+    """Handle repair command."""
+    try:
+        profile = load_reference_profile(args.profile)
+        plan = _load_repair_plan(args.repair_plan)
+        audio = load_audio(args.audio_path)
+        repaired_samples, steps = apply_repair_plan(audio.samples, audio.fs, plan)
+        out_path = Path(args.out) if args.out else Path(args.audio_path).with_suffix(".repaired.wav")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(out_path, repaired_samples, int(audio.fs))
+
+        before_metrics = compute_repair_metrics(audio.samples, audio.fs, profile)
+        after_metrics = compute_repair_metrics(repaired_samples, audio.fs, profile)
+        delta_curve = (
+            np.array(after_metrics["deviation_curve_db"], dtype=np.float64)
+            - np.array(before_metrics["deviation_curve_db"], dtype=np.float64)
+        ).tolist()
+        delta_metrics = {
+            "true_peak_dbtp": after_metrics["true_peak_dbtp"] - before_metrics["true_peak_dbtp"],
+            "noise_floor_dbfs": after_metrics["noise_floor_dbfs"] - before_metrics["noise_floor_dbfs"],
+            "deviation_curve_db": delta_curve
+        }
+        repair_section = {
+            "plan_source": {"path": str(args.repair_plan)},
+            "steps": steps,
+            "metrics": {
+                "before": before_metrics,
+                "after": after_metrics,
+                "delta": delta_metrics
+            },
+            "output": {
+                "path": str(out_path),
+                "file_hash_sha256": sha256_hex_file(str(out_path)),
+                "channels": audio.channels,
+                "sample_rate_hz": audio.fs
+            }
+        }
+
+        qcreport, decision, _, _ = _analyze_audio(
+            str(out_path),
+            args.profile,
+            mode="compliance",
+            repair=repair_section
+        )
+
+        output_json = json.dumps(qcreport, indent=2)
+        if args.report:
+            Path(args.report).write_text(output_json, encoding="utf-8")
+            print(f"Report written to: {args.report}", file=sys.stderr)
+        else:
+            print(output_json)
+        print(f"Repaired audio written to: {out_path}", file=sys.stderr)
+        return _exit_code_for_status(decision.overall_status)
+    except FileNotFoundError as e:
+        print(f"Error: File not found - {e}", file=sys.stderr)
+        return EXIT_DECODE_ERROR
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return EXIT_DECODE_ERROR
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid profile JSON - {e}", file=sys.stderr)
+        return EXIT_PROFILE_ERROR
+    except KeyError as e:
+        print(f"Error: Missing profile key - {e}", file=sys.stderr)
+        return EXIT_PROFILE_ERROR
+    except Exception as e:
+        print(f"Internal error: {e}", file=sys.stderr)
+        return EXIT_INTERNAL_ERROR
 
 
 def cmd_analyze(args) -> int:
@@ -1818,6 +1922,35 @@ def main():
         help="Output path for reproducibility Markdown"
     )
     analyze_parser.set_defaults(func=cmd_analyze)
+
+    # repair command
+    repair_parser = subparsers.add_parser(
+        "repair",
+        help="Repair audio with a DSP plan and produce a QC report"
+    )
+    repair_parser.add_argument(
+        "audio_path",
+        help="Path to audio file (WAV)"
+    )
+    repair_parser.add_argument(
+        "--profile", "-p",
+        required=True,
+        help="Path to reference profile JSON"
+    )
+    repair_parser.add_argument(
+        "--repair-plan",
+        required=True,
+        help="Path to repair plan (YAML/JSON)"
+    )
+    repair_parser.add_argument(
+        "--out",
+        help="Output path for repaired audio (default: <input>.repaired.wav)"
+    )
+    repair_parser.add_argument(
+        "--report",
+        help="Output path for QC report JSON (default: stdout)"
+    )
+    repair_parser.set_defaults(func=cmd_repair)
     
     # validate command
     validate_parser = subparsers.add_parser(
