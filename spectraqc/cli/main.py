@@ -33,6 +33,11 @@ from spectraqc.algorithms.registry import (
 from spectraqc.profiles.loader import load_reference_profile
 from spectraqc.thresholds.evaluator import evaluate
 from spectraqc.reporting.qcreport import build_qcreport_dict
+from spectraqc.reporting.batch_summary import (
+    build_batch_summary,
+    build_kpi_payload,
+    render_kpis_csv,
+)
 from spectraqc.utils.canonical_json import canonical_dumps
 from spectraqc.utils.hashing import sha256_hex_file
 
@@ -175,91 +180,21 @@ def _batch_worker(
         return (audio_path, "error", str(exc), None)
 
 
-def _aggregate_batch_results(results: list[tuple[str, str, str | None, dict | None]]) -> dict:
-    """Aggregate batch results into summary statistics."""
-    counts = {"pass": 0, "warn": 0, "fail": 0, "error": 0}
-    failure_causes: dict[str, int] = {}
-    confidence = {"pass": 0, "warn": 0, "fail": 0}
-    confidence_reasons: dict[str, int] = {}
-    metrics = {
-        "tilt_deviation": [],
-        "true_peak": [],
-        "band_mean_deviation": [],
-        "band_max_deviation": [],
-        "variance_ratio": [],
-    }
-
-    for _, status, err, report in results:
-        if status not in counts:
-            counts["error"] += 1
-        else:
-            counts[status] += 1
-        if err:
-            failure_causes[err] = failure_causes.get(err, 0) + 1
-            continue
-        if not report:
-            continue
-        conf_status = report.get("confidence", {}).get("status", "pass")
-        if conf_status in confidence:
-            confidence[conf_status] += 1
-        for reason in report.get("confidence", {}).get("reasons", []):
-            confidence_reasons[reason] = confidence_reasons.get(reason, 0) + 1
-        # Collect decision notes as failure causes for warn/fail
-        decisions = report.get("decisions", {})
-        for bd in decisions.get("band_decisions", []):
-            for key in ("mean", "max", "variance"):
-                d = bd.get(key, {})
-                d_status = d.get("status")
-                if d_status in ("warn", "fail"):
-                    note = d.get("notes") or d.get("metric", "unknown")
-                    failure_causes[note] = failure_causes.get(note, 0) + 1
-                    if d.get("metric") == "band_mean_deviation":
-                        metrics["band_mean_deviation"].append(d.get("value"))
-                    if d.get("metric") == "band_max_deviation":
-                        metrics["band_max_deviation"].append(d.get("value"))
-                    if d.get("metric") == "variance_ratio":
-                        metrics["variance_ratio"].append(d.get("value"))
-        for gd in decisions.get("global_decisions", []):
-            gd_status = gd.get("status")
-            if gd_status in ("warn", "fail"):
-                note = gd.get("notes") or gd.get("metric", "unknown")
-                failure_causes[note] = failure_causes.get(note, 0) + 1
-                if gd.get("metric") == "tilt_deviation":
-                    metrics["tilt_deviation"].append(gd.get("value"))
-                if gd.get("metric") == "true_peak":
-                    metrics["true_peak"].append(gd.get("value"))
-
-    def _summary(values: list) -> dict | None:
-        vals = [v for v in values if isinstance(v, (int, float))]
-        if not vals:
-            return None
-        arr = np.asarray(vals, dtype=np.float64)
-        return {
-            "count": int(arr.size),
-            "min": float(np.min(arr)),
-            "p50": float(np.percentile(arr, 50)),
-            "p90": float(np.percentile(arr, 90)),
-            "max": float(np.max(arr))
-        }
-
-    distributions = {k: _summary(v) for k, v in metrics.items()}
-    distributions = {k: v for k, v in distributions.items() if v is not None}
-
-    return {
-        "counts": counts,
-        "confidence_counts": confidence,
-        "confidence_reasons": dict(sorted(confidence_reasons.items(), key=lambda kv: kv[1], reverse=True)),
-        "failure_causes": dict(sorted(failure_causes.items(), key=lambda kv: kv[1], reverse=True)),
-        "distributions": distributions
-    }
-
-
 def _render_markdown_summary(summary: dict) -> str:
     """Render a Markdown summary."""
     lines = []
-    counts = summary.get("counts", {})
+    counts = summary.get("totals", {}).get("status_counts", {})
+    kpis = summary.get("kpis", {})
+    cohort = summary.get("cohort", {})
     lines.append("# Batch Summary")
     lines.append("")
+    if cohort:
+        lines.append("## Cohort Metadata")
+        lines.append("")
+        for key in ("cohort_id", "department", "campaign"):
+            if cohort.get(key):
+                lines.append(f"- {key}: {cohort.get(key)}")
+        lines.append("")
     lines.append("## Status Counts")
     lines.append("")
     lines.append(f"- pass: {counts.get('pass', 0)}")
@@ -267,7 +202,14 @@ def _render_markdown_summary(summary: dict) -> str:
     lines.append(f"- fail: {counts.get('fail', 0)}")
     lines.append(f"- error: {counts.get('error', 0)}")
     lines.append("")
-    conf = summary.get("confidence_counts", {})
+    lines.append("## KPI Snapshot")
+    lines.append("")
+    lines.append(f"- pass_rate: {kpis.get('pass_rate', 0):.3f}")
+    lines.append(f"- warn_rate: {kpis.get('warn_rate', 0):.3f}")
+    lines.append(f"- fail_rate: {kpis.get('fail_rate', 0):.3f}")
+    lines.append(f"- error_rate: {kpis.get('error_rate', 0):.3f}")
+    lines.append("")
+    conf = summary.get("confidence", {}).get("counts", {})
     lines.append("## Confidence Counts")
     lines.append("")
     lines.append(f"- pass: {conf.get('pass', 0)}")
@@ -279,27 +221,34 @@ def _render_markdown_summary(summary: dict) -> str:
     for cause, count in list(summary.get("failure_causes", {}).items())[:10]:
         lines.append(f"- {cause}: {count}")
     lines.append("")
-    lines.append("## Metric Distributions")
+    lines.append("## Band Failure Rates")
     lines.append("")
-    for metric, stats in summary.get("distributions", {}).items():
-        lines.append(f"- {metric}: count={stats['count']} min={stats['min']:.3f} p50={stats['p50']:.3f} p90={stats['p90']:.3f} max={stats['max']:.3f}")
+    for band in summary.get("band_failure_rates", []):
+        lines.append(
+            f"- {band['band_name']}: warn={band['warn']} "
+            f"fail={band['fail']} total={band['total']} "
+            f"rate={band['warn_or_fail_rate']:.3f}"
+        )
     lines.append("")
     return "\n".join(lines)
 
 
 def _render_corpus_report_md(summary: dict, *, profile_path: str, mode: str) -> str:
     """Render a one-page Markdown report for batch results."""
-    counts = summary.get("counts", {})
-    conf = summary.get("confidence_counts", {})
+    counts = summary.get("totals", {}).get("status_counts", {})
+    conf = summary.get("confidence", {}).get("counts", {})
+    cohort = summary.get("cohort", {})
     causes = list(summary.get("failure_causes", {}).items())
-    conf_reasons = list(summary.get("confidence_reasons", {}).items())
-    dists = summary.get("distributions", {})
+    conf_reasons = list(summary.get("confidence", {}).get("top_reasons", {}).items())
+    kpis = summary.get("kpis", {})
 
     lines = []
     lines.append("# SpectraQC Batch Report")
     lines.append("")
     lines.append(f"- Profile: `{profile_path}`")
     lines.append(f"- Mode: `{mode}`")
+    if cohort:
+        lines.append(f"- Cohort: `{cohort.get('cohort_id', 'n/a')}`")
     lines.append("")
     lines.append("## Corpus Results")
     lines.append("")
@@ -319,26 +268,18 @@ def _render_corpus_report_md(summary: dict, *, profile_path: str, mode: str) -> 
         for reason, count in conf_reasons[:5]:
             lines.append(f"- {reason}: {count}")
     lines.append("")
-    lines.append("## Band Metrics (Distributions)")
+    lines.append("## KPI Snapshot")
     lines.append("")
-    for metric in ("band_mean_deviation", "band_max_deviation", "variance_ratio"):
-        stats = dists.get(metric)
-        if not stats:
-            continue
+    lines.append(f"- pass_rate: {kpis.get('pass_rate', 0):.3f}")
+    lines.append(f"- warn_rate: {kpis.get('warn_rate', 0):.3f}")
+    lines.append(f"- fail_rate: {kpis.get('fail_rate', 0):.3f}")
+    lines.append("")
+    lines.append("## Band Failure Rates")
+    lines.append("")
+    for band in summary.get("band_failure_rates", []):
         lines.append(
-            f"- {metric}: count={stats['count']} min={stats['min']:.3f} "
-            f"p50={stats['p50']:.3f} p90={stats['p90']:.3f} max={stats['max']:.3f}"
-        )
-    lines.append("")
-    lines.append("## Global Metrics (Distributions)")
-    lines.append("")
-    for metric in ("tilt_deviation", "true_peak"):
-        stats = dists.get(metric)
-        if not stats:
-            continue
-        lines.append(
-            f"- {metric}: count={stats['count']} min={stats['min']:.3f} "
-            f"p50={stats['p50']:.3f} p90={stats['p90']:.3f} max={stats['max']:.3f}"
+            f"- {band['band_name']}: warn={band['warn']} fail={band['fail']} "
+            f"total={band['total']} rate={band['warn_or_fail_rate']:.3f}"
         )
     lines.append("")
     lines.append("## Notable Failures")
@@ -361,11 +302,12 @@ def _render_corpus_report_html(
     embedded_reports: dict[str, dict] | None = None
 ) -> str:
     """Render a one-page HTML report for batch results."""
-    counts = summary.get("counts", {})
-    conf = summary.get("confidence_counts", {})
+    counts = summary.get("totals", {}).get("status_counts", {})
+    conf = summary.get("confidence", {}).get("counts", {})
+    kpis = summary.get("kpis", {})
+    cohort = summary.get("cohort", {})
     causes = list(summary.get("failure_causes", {}).items())
-    conf_reasons = list(summary.get("confidence_reasons", {}).items())
-    dists = summary.get("distributions", {})
+    conf_reasons = list(summary.get("confidence", {}).get("top_reasons", {}).items())
 
     def _svg_bar(name: str, value: int, max_value: int, color: str) -> str:
         width = 240
@@ -382,28 +324,23 @@ def _render_corpus_report_html(
     total = max(1, sum(counts.values()))
     conf_total = max(1, sum(conf.values()))
 
-    def _dist_table(metric: str, stats: dict) -> str:
-        return (
+    band_rows = []
+    for band in summary.get("band_failure_rates", []):
+        band_rows.append(
             "<tr>"
-            f"<td>{metric}</td>"
-            f"<td>{stats['count']}</td>"
-            f"<td>{stats['min']:.3f}</td>"
-            f"<td>{stats['p50']:.3f}</td>"
-            f"<td>{stats['p90']:.3f}</td>"
-            f"<td>{stats['max']:.3f}</td>"
+            f"<td>{band['band_name']}</td>"
+            f"<td>{band['pass']}</td>"
+            f"<td>{band['warn']}</td>"
+            f"<td>{band['fail']}</td>"
+            f"<td>{band['total']}</td>"
+            f"<td>{band['warn_or_fail_rate']:.3f}</td>"
             "</tr>"
         )
-
-    dist_rows = []
-    for metric in ("band_mean_deviation", "band_max_deviation", "variance_ratio", "tilt_deviation", "true_peak"):
-        stats = dists.get(metric)
-        if stats:
-            dist_rows.append(_dist_table(metric, stats))
-    dist_table = (
+    band_table = (
         "<table><thead><tr>"
-        "<th>Metric</th><th>Count</th><th>Min</th><th>P50</th><th>P90</th><th>Max</th>"
+        "<th>Band</th><th>Pass</th><th>Warn</th><th>Fail</th><th>Total</th><th>Warn/Fail Rate</th>"
         "</tr></thead><tbody>"
-        + "".join(dist_rows) +
+        + "".join(band_rows) +
         "</tbody></table>"
     )
 
@@ -426,6 +363,20 @@ def _render_corpus_report_html(
         _svg_bar("fail", conf.get("fail", 0), conf_total, "#e53935"),
     ])
 
+    def _format_kpi(value: float | None) -> str:
+        if not isinstance(value, (int, float)) or not np.isfinite(value):
+            return "n/a"
+        return f"{value:.3f}"
+
+    dashboard_cards = "".join([
+        f"<div class='card'><div class='card-label'>Pass rate</div><div class='card-value'>{_format_kpi(kpis.get('pass_rate'))}</div></div>",
+        f"<div class='card'><div class='card-label'>Warn rate</div><div class='card-value'>{_format_kpi(kpis.get('warn_rate'))}</div></div>",
+        f"<div class='card'><div class='card-label'>Fail rate</div><div class='card-value'>{_format_kpi(kpis.get('fail_rate'))}</div></div>",
+        f"<div class='card'><div class='card-label'>Error rate</div><div class='card-value'>{_format_kpi(kpis.get('error_rate'))}</div></div>",
+        f"<div class='card'><div class='card-label'>Mean tilt dev</div><div class='card-value'>{_format_kpi(kpis.get('mean_tilt_deviation_db_per_oct'))}</div></div>",
+        f"<div class='card'><div class='card-label'>Mean true peak</div><div class='card-value'>{_format_kpi(kpis.get('mean_true_peak_dbtp'))}</div></div>",
+    ])
+
     embedded_reports = embedded_reports or {}
     embedded_reports_json = json.dumps(embedded_reports, ensure_ascii=True).replace("</", "<\\/")
     viewer_section_html, viewer_section_css, viewer_section_js = _render_qcreport_viewer_section(
@@ -441,6 +392,10 @@ def _render_corpus_report_html(
         "h1,h2{margin:0 0 12px 0}"
         ".meta{color:#555;margin-bottom:16px}"
         ".section{margin:20px 0}"
+        ".dashboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}"
+        ".card{border:1px solid #eee;border-radius:10px;padding:12px;background:#fafafa}"
+        ".card-label{color:#666;font-size:12px;text-transform:uppercase;letter-spacing:0.04em}"
+        ".card-value{font-size:20px;font-weight:700;margin-top:6px}"
         ".bar-row{display:flex;align-items:center;gap:8px;margin:6px 0}"
         ".bar-label{width:60px;text-transform:uppercase;font-size:12px;color:#555}"
         ".bar-value{width:40px;text-align:right;font-variant-numeric:tabular-nums}"
@@ -457,15 +412,18 @@ def _render_corpus_report_html(
         f"{viewer_section_css}"
         "</style></head><body>"
         "<h1>SpectraQC Batch Report</h1>"
-        f"<div class='meta'>Profile: <code>{profile_path}</code> | Mode: <code>{mode}</code></div>"
+        f"<div class='meta'>Profile: <code>{profile_path}</code> | Mode: <code>{mode}</code>"
+        f"{' | Cohort: <code>' + cohort.get('cohort_id') + '</code>' if cohort.get('cohort_id') else ''}</div>"
+        "<div class='section'><h2>Value Dashboard</h2>"
+        f"<div class='dashboard'>{dashboard_cards}</div></div>"
         "<div class='section'><h2>Corpus Results</h2>"
         f"{status_bars}</div>"
         "<div class='section'><h2>Confidence Notes</h2>"
         f"{conf_bars}"
         "<h3>Top confidence reasons</h3><ul>"
         f"{top_conf}</ul></div>"
-        "<div class='section'><h2>Metric Distributions</h2>"
-        f"{dist_table}</div>"
+        "<div class='section'><h2>Band Failure Rates</h2>"
+        f"{band_table}</div>"
         "<div class='section'><h2>Notable Failures</h2><ul>"
         f"{top_causes}</ul></div>"
         f"{viewer_section_html}"
@@ -1507,7 +1465,7 @@ def cmd_batch(args) -> int:
                     else:
                         print(f"[OK] {audio_path}: {status}")
 
-        summary = _aggregate_batch_results(results)
+        summary = build_batch_summary(results)
         summary_json_path = _resolve_report_output_path(
             out_dir,
             args.summary_json,
@@ -1526,6 +1484,26 @@ def cmd_batch(args) -> int:
         if summary_md_path:
             summary_md_path.write_text(
                 _render_markdown_summary(summary),
+                encoding="utf-8"
+            )
+        summary_kpis_json_path = _resolve_report_output_path(
+            out_dir,
+            args.summary_kpis_json if args.summary else None,
+            "batch-summary-kpis.json"
+        )
+        if summary_kpis_json_path:
+            summary_kpis_json_path.write_text(
+                json.dumps(build_kpi_payload(summary), indent=2),
+                encoding="utf-8"
+            )
+        summary_kpis_csv_path = _resolve_report_output_path(
+            out_dir,
+            args.summary_kpis_csv if args.summary else None,
+            "batch-summary-kpis.csv"
+        )
+        if summary_kpis_csv_path:
+            summary_kpis_csv_path.write_text(
+                render_kpis_csv(summary),
                 encoding="utf-8"
             )
         report_md_path = _resolve_report_output_path(
@@ -1716,6 +1694,21 @@ def main():
         "--summary-json",
         default="batch-summary.json",
         help="Batch summary JSON filename (default: batch-summary.json in --out-dir)"
+    )
+    batch_parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Write cohort KPI summary exports (CSV/JSON) alongside batch outputs"
+    )
+    batch_parser.add_argument(
+        "--summary-kpis-json",
+        default="batch-summary-kpis.json",
+        help="Summary KPI JSON filename (default: batch-summary-kpis.json in --out-dir)"
+    )
+    batch_parser.add_argument(
+        "--summary-kpis-csv",
+        default="batch-summary-kpis.csv",
+        help="Summary KPI CSV filename (default: batch-summary-kpis.csv in --out-dir)"
     )
     batch_parser.add_argument(
         "--summary-md",

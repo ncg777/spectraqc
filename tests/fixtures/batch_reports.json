@@ -1,0 +1,90 @@
+[
+  {
+    "schema_version": "1.0",
+    "report_id": "qc_fixture_1",
+    "created_utc": "2024-01-01T10:00:00Z",
+    "engine": {"name": "spectraqc", "version": "0"},
+    "input": {
+      "path": "/data/audio1.wav",
+      "file_hash_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "profile": {
+      "name": "fixture_profile",
+      "profile_hash_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "analysis_lock_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "analysis": {"created_utc": "2024-01-01T10:00:00Z"},
+    "metrics": {
+      "band_metrics": [
+        {
+          "band_name": "low",
+          "mean_deviation_db": 0.5,
+          "max_deviation_db": 1.2,
+          "variance_ratio": 1.1
+        }
+      ],
+      "global_metrics": {
+        "tilt_deviation_db_per_oct": 0.2,
+        "true_peak_dbtp": -1.0
+      }
+    },
+    "decisions": {
+      "overall_status": "pass",
+      "band_decisions": [
+        {
+          "band_name": "low",
+          "mean": {"status": "pass", "metric": "band_mean_deviation"},
+          "max": {"status": "pass", "metric": "band_max_deviation"},
+          "variance": {"status": "pass", "metric": "variance_ratio"}
+        }
+      ],
+      "global_decisions": []
+    },
+    "confidence": {"status": "pass", "reasons": []},
+    "cohort": {"cohort_id": "C-001", "department": "Research", "campaign": "Pilot"}
+  },
+  {
+    "schema_version": "1.0",
+    "report_id": "qc_fixture_2",
+    "created_utc": "2024-01-02T10:00:00Z",
+    "engine": {"name": "spectraqc", "version": "0"},
+    "input": {
+      "path": "/data/audio2.wav",
+      "file_hash_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "profile": {
+      "name": "fixture_profile",
+      "profile_hash_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "analysis_lock_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "analysis": {"created_utc": "2024-01-02T10:00:00Z"},
+    "metrics": {
+      "band_metrics": [
+        {
+          "band_name": "low",
+          "mean_deviation_db": 1.5,
+          "max_deviation_db": 2.2,
+          "variance_ratio": 1.4
+        }
+      ],
+      "global_metrics": {
+        "tilt_deviation_db_per_oct": 0.6,
+        "true_peak_dbtp": -0.5
+      }
+    },
+    "decisions": {
+      "overall_status": "warn",
+      "band_decisions": [
+        {
+          "band_name": "low",
+          "mean": {"status": "warn", "metric": "band_mean_deviation"},
+          "max": {"status": "pass", "metric": "band_max_deviation"},
+          "variance": {"status": "pass", "metric": "variance_ratio"}
+        }
+      ],
+      "global_decisions": []
+    },
+    "confidence": {"status": "warn", "reasons": ["short_effective_duration"]},
+    "cohort": {"cohort_id": "C-001", "department": "Research", "campaign": "Pilot"}
+  }
+]
