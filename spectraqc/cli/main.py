@@ -38,6 +38,11 @@ from spectraqc.algorithms.registry import (
 from spectraqc.profiles.loader import load_reference_profile
 from spectraqc.thresholds.evaluator import evaluate
 from spectraqc.reporting.qcreport import build_qcreport_dict
+from spectraqc.reporting.batch_summary import (
+    build_batch_summary,
+    build_kpi_payload,
+    render_kpis_csv,
+)
 from spectraqc.utils.canonical_json import canonical_dumps
 from spectraqc.utils.hashing import sha256_hex_file
 
@@ -54,6 +59,107 @@ MIN_EFFECTIVE_SECONDS = 0.5
 SILENCE_MIN_RMS_DBFS = -60.0
 SILENCE_FRAME_SECONDS = 0.1
 SUPPORTED_AUDIO_EXTS = {".wav", ".flac", ".aiff", ".aif", ".mp3"}
+
+VIEWPORT_JS_HELPER = """
+const ViewportMath = (function() {
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+  function zoomViewport(viewport, zoomFactor, center, bounds, minSpan) {
+    const xSpan = viewport.xMax - viewport.xMin;
+    const ySpan = viewport.yMax - viewport.yMin;
+    const newXSpan = Math.max(minSpan.x, xSpan * zoomFactor.x);
+    const newYSpan = Math.max(minSpan.y, ySpan * zoomFactor.y);
+    const xCenter = center.x;
+    const yCenter = center.y;
+    let xMin = xCenter - newXSpan / 2;
+    let xMax = xCenter + newXSpan / 2;
+    let yMin = yCenter - newYSpan / 2;
+    let yMax = yCenter + newYSpan / 2;
+    if (xMax - xMin > bounds.xMax - bounds.xMin) {
+      xMin = bounds.xMin;
+      xMax = bounds.xMax;
+    } else {
+      if (xMin < bounds.xMin) {
+        const shift = bounds.xMin - xMin;
+        xMin += shift;
+        xMax += shift;
+      }
+      if (xMax > bounds.xMax) {
+        const shift = xMax - bounds.xMax;
+        xMin -= shift;
+        xMax -= shift;
+      }
+    }
+    if (yMax - yMin > bounds.yMax - bounds.yMin) {
+      yMin = bounds.yMin;
+      yMax = bounds.yMax;
+    } else {
+      if (yMin < bounds.yMin) {
+        const shift = bounds.yMin - yMin;
+        yMin += shift;
+        yMax += shift;
+      }
+      if (yMax > bounds.yMax) {
+        const shift = yMax - bounds.yMax;
+        yMin -= shift;
+        yMax -= shift;
+      }
+    }
+    return { xMin, xMax, yMin, yMax };
+  }
+  function panViewport(viewport, delta, bounds) {
+    let xMin = viewport.xMin + delta.x;
+    let xMax = viewport.xMax + delta.x;
+    let yMin = viewport.yMin + delta.y;
+    let yMax = viewport.yMax + delta.y;
+    const xSpan = xMax - xMin;
+    const ySpan = yMax - yMin;
+    if (xMin < bounds.xMin) {
+      xMin = bounds.xMin;
+      xMax = xMin + xSpan;
+    }
+    if (xMax > bounds.xMax) {
+      xMax = bounds.xMax;
+      xMin = xMax - xSpan;
+    }
+    if (yMin < bounds.yMin) {
+      yMin = bounds.yMin;
+      yMax = yMin + ySpan;
+    }
+    if (yMax > bounds.yMax) {
+      yMax = bounds.yMax;
+      yMin = yMax - ySpan;
+    }
+    return { xMin, xMax, yMin, yMax };
+  }
+  function viewportFromRect(start, end, bounds, minSpan) {
+    let xMin = Math.min(start.x, end.x);
+    let xMax = Math.max(start.x, end.x);
+    let yMin = Math.min(start.y, end.y);
+    let yMax = Math.max(start.y, end.y);
+    if (xMax - xMin < minSpan.x) {
+      const center = (xMin + xMax) / 2;
+      xMin = center - minSpan.x / 2;
+      xMax = center + minSpan.x / 2;
+    }
+    if (yMax - yMin < minSpan.y) {
+      const center = (yMin + yMax) / 2;
+      yMin = center - minSpan.y / 2;
+      yMax = center + minSpan.y / 2;
+    }
+    xMin = clamp(xMin, bounds.xMin, bounds.xMax - minSpan.x);
+    xMax = clamp(xMax, bounds.xMin + minSpan.x, bounds.xMax);
+    yMin = clamp(yMin, bounds.yMin, bounds.yMax - minSpan.y);
+    yMax = clamp(yMax, bounds.yMin + minSpan.y, bounds.yMax);
+    return { xMin, xMax, yMin, yMax };
+  }
+  return { zoomViewport, panViewport, viewportFromRect };
+})();
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { ViewportMath };
+}
+"""
 
 
 def _nice_num(value: float, round_value: bool) -> float:
@@ -362,89 +468,10 @@ def _batch_worker(
         return (audio_path, "error", str(exc), None)
 
 
-def _aggregate_batch_results(results: list[tuple[str, str, str | None, dict | None]]) -> dict:
-    """Aggregate batch results into summary statistics."""
-    counts = {"pass": 0, "warn": 0, "fail": 0, "error": 0}
-    failure_causes: dict[str, int] = {}
-    confidence = {"pass": 0, "warn": 0, "fail": 0}
-    confidence_reasons: dict[str, int] = {}
-    metrics = {
-        "tilt_deviation": [],
-        "true_peak": [],
-        "band_mean_deviation": [],
-        "band_max_deviation": [],
-        "variance_ratio": [],
-    }
-
-    for _, status, err, report in results:
-        if status not in counts:
-            counts["error"] += 1
-        else:
-            counts[status] += 1
-        if err:
-            failure_causes[err] = failure_causes.get(err, 0) + 1
-            continue
-        if not report:
-            continue
-        conf_status = report.get("confidence", {}).get("status", "pass")
-        if conf_status in confidence:
-            confidence[conf_status] += 1
-        for reason in report.get("confidence", {}).get("reasons", []):
-            confidence_reasons[reason] = confidence_reasons.get(reason, 0) + 1
-        # Collect decision notes as failure causes for warn/fail
-        decisions = report.get("decisions", {})
-        for bd in decisions.get("band_decisions", []):
-            for key in ("mean", "max", "variance"):
-                d = bd.get(key, {})
-                d_status = d.get("status")
-                if d_status in ("warn", "fail"):
-                    note = d.get("notes") or d.get("metric", "unknown")
-                    failure_causes[note] = failure_causes.get(note, 0) + 1
-                    if d.get("metric") == "band_mean_deviation":
-                        metrics["band_mean_deviation"].append(d.get("value"))
-                    if d.get("metric") == "band_max_deviation":
-                        metrics["band_max_deviation"].append(d.get("value"))
-                    if d.get("metric") == "variance_ratio":
-                        metrics["variance_ratio"].append(d.get("value"))
-        for gd in decisions.get("global_decisions", []):
-            gd_status = gd.get("status")
-            if gd_status in ("warn", "fail"):
-                note = gd.get("notes") or gd.get("metric", "unknown")
-                failure_causes[note] = failure_causes.get(note, 0) + 1
-                if gd.get("metric") == "tilt_deviation":
-                    metrics["tilt_deviation"].append(gd.get("value"))
-                if gd.get("metric") == "true_peak":
-                    metrics["true_peak"].append(gd.get("value"))
-
-    def _summary(values: list) -> dict | None:
-        vals = [v for v in values if isinstance(v, (int, float))]
-        if not vals:
-            return None
-        arr = np.asarray(vals, dtype=np.float64)
-        return {
-            "count": int(arr.size),
-            "min": float(np.min(arr)),
-            "p50": float(np.percentile(arr, 50)),
-            "p90": float(np.percentile(arr, 90)),
-            "max": float(np.max(arr))
-        }
-
-    distributions = {k: _summary(v) for k, v in metrics.items()}
-    distributions = {k: v for k, v in distributions.items() if v is not None}
-
-    return {
-        "counts": counts,
-        "confidence_counts": confidence,
-        "confidence_reasons": dict(sorted(confidence_reasons.items(), key=lambda kv: kv[1], reverse=True)),
-        "failure_causes": dict(sorted(failure_causes.items(), key=lambda kv: kv[1], reverse=True)),
-        "distributions": distributions
-    }
-
-
 def _render_markdown_summary(summary: dict) -> str:
     """Render a Markdown summary."""
     lines = []
-    counts = summary.get("counts", {})
+    counts = summary.get("totals", {}).get("status_counts", {})
     lines.append("# Batch Summary")
     lines.append("")
     lines.append("## Status Counts")
@@ -454,7 +481,7 @@ def _render_markdown_summary(summary: dict) -> str:
     lines.append(f"- fail: {counts.get('fail', 0)}")
     lines.append(f"- error: {counts.get('error', 0)}")
     lines.append("")
-    conf = summary.get("confidence_counts", {})
+    conf = summary.get("confidence", {}).get("counts", {})
     lines.append("## Confidence Counts")
     lines.append("")
     lines.append(f"- pass: {conf.get('pass', 0)}")
@@ -466,21 +493,24 @@ def _render_markdown_summary(summary: dict) -> str:
     for cause, count in list(summary.get("failure_causes", {}).items())[:10]:
         lines.append(f"- {cause}: {count}")
     lines.append("")
+    kpis = summary.get("kpis", {})
     lines.append("## Metric Distributions")
     lines.append("")
-    for metric, stats in summary.get("distributions", {}).items():
-        lines.append(f"- {metric}: count={stats['count']} min={stats['min']:.3f} p50={stats['p50']:.3f} p90={stats['p90']:.3f} max={stats['max']:.3f}")
+    for metric_key in ["tilt_deviation_db_per_oct", "true_peak_dbtp", "band_mean_deviation_db", "band_max_deviation_db", "band_variance_ratio"]:
+        mean_val = kpis.get(f"mean_{metric_key}")
+        if mean_val is not None:
+            lines.append(f"- {metric_key}: mean={mean_val:.3f}")
     lines.append("")
     return "\n".join(lines)
 
 
 def _render_corpus_report_md(summary: dict, *, profile_path: str, mode: str) -> str:
     """Render a one-page Markdown report for batch results."""
-    counts = summary.get("counts", {})
-    conf = summary.get("confidence_counts", {})
+    counts = summary.get("totals", {}).get("status_counts", {})
+    conf = summary.get("confidence", {}).get("counts", {})
     causes = list(summary.get("failure_causes", {}).items())
-    conf_reasons = list(summary.get("confidence_reasons", {}).items())
-    dists = summary.get("distributions", {})
+    conf_reasons = list(summary.get("confidence", {}).get("top_reasons", {}).items())
+    kpis = summary.get("kpis", {})
 
     lines = []
     lines.append("# SpectraQC Batch Report")
@@ -506,27 +536,14 @@ def _render_corpus_report_md(summary: dict, *, profile_path: str, mode: str) -> 
         for reason, count in conf_reasons[:5]:
             lines.append(f"- {reason}: {count}")
     lines.append("")
-    lines.append("## Band Metrics (Distributions)")
+    lines.append("## KPI Metrics")
     lines.append("")
-    for metric in ("band_mean_deviation", "band_max_deviation", "variance_ratio"):
-        stats = dists.get(metric)
-        if not stats:
-            continue
-        lines.append(
-            f"- {metric}: count={stats['count']} min={stats['min']:.3f} "
-            f"p50={stats['p50']:.3f} p90={stats['p90']:.3f} max={stats['max']:.3f}"
-        )
+    lines.append("## KPI Metrics")
     lines.append("")
-    lines.append("## Global Metrics (Distributions)")
-    lines.append("")
-    for metric in ("tilt_deviation", "true_peak"):
-        stats = dists.get(metric)
-        if not stats:
-            continue
-        lines.append(
-            f"- {metric}: count={stats['count']} min={stats['min']:.3f} "
-            f"p50={stats['p50']:.3f} p90={stats['p90']:.3f} max={stats['max']:.3f}"
-        )
+    for metric_key in ["tilt_deviation_db_per_oct", "true_peak_dbtp", "band_mean_deviation_db", "band_max_deviation_db", "band_variance_ratio"]:
+        mean_val = kpis.get(f"mean_{metric_key}")
+        if mean_val is not None:
+            lines.append(f"- mean_{metric_key}: {mean_val:.3f}")
     lines.append("")
     lines.append("## Notable Failures")
     lines.append("")
@@ -548,11 +565,11 @@ def _render_corpus_report_html(
     embedded_reports: dict[str, dict] | None = None
 ) -> str:
     """Render a one-page HTML report for batch results."""
-    counts = summary.get("counts", {})
-    conf = summary.get("confidence_counts", {})
+    counts = summary.get("totals", {}).get("status_counts", {})
+    conf = summary.get("confidence", {}).get("counts", {})
     causes = list(summary.get("failure_causes", {}).items())
-    conf_reasons = list(summary.get("confidence_reasons", {}).items())
-    dists = summary.get("distributions", {})
+    conf_reasons = list(summary.get("confidence", {}).get("top_reasons", {}).items())
+    kpis = summary.get("kpis", {})
 
     def _svg_bar(name: str, value: int, max_value: int, color: str) -> str:
         width = 240
@@ -569,30 +586,19 @@ def _render_corpus_report_html(
     total = max(1, sum(counts.values()))
     conf_total = max(1, sum(conf.values()))
 
-    def _dist_table(metric: str, stats: dict) -> str:
-        return (
-            "<tr>"
-            f"<td>{metric}</td>"
-            f"<td>{stats['count']}</td>"
-            f"<td>{stats['min']:.3f}</td>"
-            f"<td>{stats['p50']:.3f}</td>"
-            f"<td>{stats['p90']:.3f}</td>"
-            f"<td>{stats['max']:.3f}</td>"
-            "</tr>"
-        )
-
-    dist_rows = []
-    for metric in ("band_mean_deviation", "band_max_deviation", "variance_ratio", "tilt_deviation", "true_peak"):
-        stats = dists.get(metric)
-        if stats:
-            dist_rows.append(_dist_table(metric, stats))
-    dist_table = (
+    kpi_rows = []
+    for metric_key in ["tilt_deviation_db_per_oct", "true_peak_dbtp", "band_mean_deviation_db", "band_max_deviation_db", "band_variance_ratio"]:
+        mean_val = kpis.get(f"mean_{metric_key}")
+        if mean_val is not None:
+            kpi_rows.append(f"<tr><td>{metric_key}</td><td>{mean_val:.3f}</td></tr>")
+    
+    kpi_table = (
         "<table><thead><tr>"
-        "<th>Metric</th><th>Count</th><th>Min</th><th>P50</th><th>P90</th><th>Max</th>"
+        "<th>Metric</th><th>Mean</th>"
         "</tr></thead><tbody>"
-        + "".join(dist_rows) +
+        + "".join(kpi_rows) +
         "</tbody></table>"
-    )
+    ) if kpi_rows else "<p>No KPI data available</p>"
 
     top_causes = "".join(
         f"<li>{cause}: {count}</li>" for cause, count in causes[:10]
@@ -651,8 +657,8 @@ def _render_corpus_report_html(
         f"{conf_bars}"
         "<h3>Top confidence reasons</h3><ul>"
         f"{top_conf}</ul></div>"
-        "<div class='section'><h2>Metric Distributions</h2>"
-        f"{dist_table}</div>"
+        "<div class='section'><h2>KPI Metrics</h2>"
+        f"{kpi_table}</div>"
         "<div class='section'><h2>Notable Failures</h2><ul>"
         f"{top_causes}</ul></div>"
         f"{viewer_section_html}"
@@ -1738,6 +1744,8 @@ def cmd_batch(args) -> int:
         report_outputs_requested = any([
             args.summary_json,
             args.summary_md,
+            args.summary_kpis_json,
+            args.summary_kpis_csv,
             args.report_md,
             args.report_html,
             args.repro_md
@@ -1780,7 +1788,7 @@ def cmd_batch(args) -> int:
                     else:
                         print(f"[OK] {audio_path}: {status}")
 
-        summary = _aggregate_batch_results(results)
+        summary = build_batch_summary(results)
         summary_json_path = _resolve_report_output_path(
             out_dir,
             args.summary_json,
@@ -1791,6 +1799,30 @@ def cmd_batch(args) -> int:
                 json.dumps(summary, indent=2),
                 encoding="utf-8"
             )
+        
+        kpis_json_path = _resolve_report_output_path(
+            out_dir,
+            args.summary_kpis_json,
+            "batch-kpis.json"
+        )
+        if kpis_json_path:
+            kpis_payload = build_kpi_payload(summary)
+            kpis_json_path.write_text(
+                json.dumps(kpis_payload, indent=2),
+                encoding="utf-8"
+            )
+        
+        kpis_csv_path = _resolve_report_output_path(
+            out_dir,
+            args.summary_kpis_csv,
+            "batch-kpis.csv"
+        )
+        if kpis_csv_path:
+            kpis_csv_path.write_text(
+                render_kpis_csv(summary),
+                encoding="utf-8"
+            )
+        
         summary_md_path = _resolve_report_output_path(
             out_dir,
             args.summary_md,
@@ -2023,6 +2055,16 @@ def main():
         "--summary-md",
         default="batch-summary.md",
         help="Batch summary Markdown filename (default: batch-summary.md in --out-dir)"
+    )
+    batch_parser.add_argument(
+        "--summary-kpis-json",
+        default="batch-kpis.json",
+        help="Batch KPIs JSON filename (default: batch-kpis.json in --out-dir)"
+    )
+    batch_parser.add_argument(
+        "--summary-kpis-csv",
+        default="batch-kpis.csv",
+        help="Batch KPIs CSV filename (default: batch-kpis.csv in --out-dir)"
     )
     batch_parser.add_argument(
         "--report-md",

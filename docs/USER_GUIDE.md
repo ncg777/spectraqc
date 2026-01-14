@@ -133,3 +133,26 @@ For institutional deployments:
 - CLI reference: `docs/CLI_REFERENCE.md`
 - Onboarding workshop deck: `docs/ONBOARDING_WORKSHOP.md`
 - Profile schema: `docs/reference_profile_v2.schema.json`
+
+## 12) Manual Browser Snapshot Test Plan (Report Viewer)
+
+The CLI renders HTML with an embedded report viewer. Use the steps below to manually verify chart interactions and capture snapshots when reviewing UI changes.
+
+1. Generate a batch HTML report (or open an existing one):
+   ```bash
+   spectraqc batch --folder /path/to/audio --profile /path/to/profile.ref.json --out-dir /tmp/spectraqc
+   ```
+   Open `/tmp/spectraqc/batch-report.html` in a browser.
+2. In the report viewer, select a QCReport with populated charts.
+3. For each chart (LTPSD, Deviation Curve, band/global bars), verify:
+   - Zoom in/out buttons update the canvas.
+   - Reset returns to the full-range view.
+   - Scroll wheel zooms toward the cursor position.
+   - Drag a selection box to zoom into a region.
+   - Drag-to-pan (right click or shift-drag) moves the viewport.
+4. Click **Full screen**:
+   - Confirm the overlay shows a live canvas (not a static image).
+   - Verify zoom/pan controls still work in the overlay.
+   - Confirm the zoom level matches the inline chart when you toggle full screen.
+5. Capture screenshots for any UI changes and attach them to review notes.
+
