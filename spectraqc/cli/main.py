@@ -538,8 +538,6 @@ def _render_corpus_report_md(summary: dict, *, profile_path: str, mode: str) -> 
     lines.append("")
     lines.append("## KPI Metrics")
     lines.append("")
-    lines.append("## KPI Metrics")
-    lines.append("")
     for metric_key in ["tilt_deviation_db_per_oct", "true_peak_dbtp", "band_mean_deviation_db", "band_max_deviation_db", "band_variance_ratio"]:
         mean_val = kpis.get(f"mean_{metric_key}")
         if mean_val is not None:
