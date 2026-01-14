@@ -1910,6 +1910,14 @@ def cmd_batch(args) -> int:
         return EXIT_INTERNAL_ERROR
 
 
+def cmd_gui(args) -> int:
+    """Launch the SpectraQC GUI."""
+    from spectraqc.gui.server import run_gui_server
+
+    run_gui_server(host=args.host, port=args.port, open_browser=not args.no_open)
+    return EXIT_PASS
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -2091,6 +2099,28 @@ def main():
         help="Parallel workers (default: cpu_count-1)"
     )
     batch_parser.set_defaults(func=cmd_batch)
+
+    gui_parser = subparsers.add_parser(
+        "gui",
+        help="Launch the SpectraQC GUI"
+    )
+    gui_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host interface to bind (default: 127.0.0.1)"
+    )
+    gui_parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to serve the GUI on (default: 8000)"
+    )
+    gui_parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Do not open the browser automatically"
+    )
+    gui_parser.set_defaults(func=cmd_gui)
     
     args = parser.parse_args()
     

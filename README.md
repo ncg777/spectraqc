@@ -343,6 +343,26 @@ Arguments and options:
   - Spec: number of parallel worker processes.
   - Usefulness: balances throughput and CPU usage for large batches.
 
+### `spectraqc gui`
+- Purpose: launch the local web-based GUI for all SpectraQC workflows.
+- Usefulness: run analyze/validate/repair/batch and build profiles without the CLI.
+
+Usage:
+```
+spectraqc gui [options]
+```
+
+Arguments and options:
+- `--host` (default: `127.0.0.1`)
+  - Spec: host interface to bind for the GUI server.
+  - Usefulness: exposes the GUI on a specific interface if needed.
+- `--port` (default: `8000`)
+  - Spec: port for the GUI server.
+  - Usefulness: avoids port conflicts when running multiple services.
+- `--no-open`
+  - Spec: disables automatic browser launch.
+  - Usefulness: handy for headless environments or remote servers.
+
 Batch file discovery:
 - Only files with extensions `.wav`, `.flac`, `.aiff`, `.aif`, `.mp3` are included when using `--folder`.
 

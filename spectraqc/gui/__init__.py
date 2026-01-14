@@ -1,0 +1,1 @@
+"""SpectraQC GUI package."""
