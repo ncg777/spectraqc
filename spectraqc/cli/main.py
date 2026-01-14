@@ -5,6 +5,7 @@ import json
 import sys
 import platform
 import os
+import math
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Iterable
 from datetime import datetime, timezone
@@ -49,6 +50,165 @@ MIN_EFFECTIVE_SECONDS = 0.5
 SILENCE_MIN_RMS_DBFS = -60.0
 SILENCE_FRAME_SECONDS = 0.1
 SUPPORTED_AUDIO_EXTS = {".wav", ".flac", ".aiff", ".aif", ".mp3"}
+
+
+def _nice_num(value: float, round_value: bool) -> float:
+    if value <= 0:
+        return 0.0
+    exp = math.floor(math.log10(value))
+    fraction = value / (10**exp)
+    if round_value:
+        if fraction < 1.5:
+            nice = 1.0
+        elif fraction < 3.0:
+            nice = 2.0
+        elif fraction < 7.0:
+            nice = 5.0
+        else:
+            nice = 10.0
+    else:
+        if fraction <= 1.0:
+            nice = 1.0
+        elif fraction <= 2.0:
+            nice = 2.0
+        elif fraction <= 5.0:
+            nice = 5.0
+        else:
+            nice = 10.0
+    return nice * (10**exp)
+
+
+def _nice_linear_ticks(min_val: float, max_val: float, *, target: int = 6) -> list[float]:
+    if not math.isfinite(min_val) or not math.isfinite(max_val):
+        return []
+    if min_val == max_val:
+        return [min_val]
+    if target < 2:
+        target = 2
+    span = _nice_num(max_val - min_val, False)
+    step = _nice_num(span / (target - 1), True)
+    if step == 0:
+        return [min_val, max_val]
+    tick_min = math.ceil(min_val / step) * step
+    tick_max = math.floor(max_val / step) * step
+    ticks = []
+    current = tick_min
+    for _ in range(1000):
+        if current > tick_max + step * 0.5:
+            break
+        if min_val <= current <= max_val:
+            ticks.append(round(current, 10))
+        current += step
+    if not ticks:
+        return [min_val, max_val]
+    if ticks[0] > min_val:
+        ticks.insert(0, round(min_val, 10))
+    if ticks[-1] < max_val:
+        ticks.append(round(max_val, 10))
+    return ticks
+
+
+def _nice_log_ticks(min_val: float, max_val: float) -> list[float]:
+    if not math.isfinite(min_val) or not math.isfinite(max_val):
+        return []
+    if min_val <= 0 or max_val <= 0 or min_val > max_val:
+        return []
+    decade_min = math.floor(math.log10(min_val))
+    decade_max = math.ceil(math.log10(max_val))
+    ticks = []
+    for decade in range(decade_min, decade_max + 1):
+        base = 10 ** decade
+        for mult in (1, 2, 5):
+            value = mult * base
+            if min_val <= value <= max_val:
+                ticks.append(float(value))
+    return ticks
+
+
+def _nice_ticks_py(
+    min_val: float,
+    max_val: float,
+    *,
+    log_scale: bool = False,
+    target: int = 6
+) -> list[float]:
+    if log_scale:
+        return _nice_log_ticks(min_val, max_val)
+    return _nice_linear_ticks(min_val, max_val, target=target)
+
+
+TICK_GENERATOR_JS = (
+    "function niceNum(value,roundValue){"
+    "  if(!(value>0)){return 0;}"
+    "  const exp=Math.floor(Math.log10(value));"
+    "  const fraction=value/Math.pow(10,exp);"
+    "  let nice;"
+    "  if(roundValue){"
+    "    if(fraction<1.5){nice=1;}"
+    "    else if(fraction<3){nice=2;}"
+    "    else if(fraction<7){nice=5;}"
+    "    else{nice=10;}"
+    "  }else{"
+    "    if(fraction<=1){nice=1;}"
+    "    else if(fraction<=2){nice=2;}"
+    "    else if(fraction<=5){nice=5;}"
+    "    else{nice=10;}"
+    "  }"
+    "  return nice*Math.pow(10,exp);"
+    "}"
+    "function niceLinearTicks(minVal,maxVal,target){"
+    "  if(!Number.isFinite(minVal)||!Number.isFinite(maxVal)){return [];}"
+    "  if(minVal===maxVal){return [minVal];}"
+    "  const count=Math.max(2,target||6);"
+    "  const span=niceNum(maxVal-minVal,false);"
+    "  const step=niceNum(span/(count-1),true);"
+    "  if(step===0){return [minVal,maxVal];}"
+    "  const tickMin=Math.ceil(minVal/step)*step;"
+    "  const tickMax=Math.floor(maxVal/step)*step;"
+    "  const ticks=[];"
+    "  for(let v=tickMin,guard=0; guard<1000; guard++, v+=step){"
+    "    if(v>tickMax+step*0.5){break;}"
+    "    if(v>=minVal && v<=maxVal){"
+    "      ticks.push(Math.round(v*1e10)/1e10);"
+    "    }"
+    "  }"
+    "  if(!ticks.length){return [minVal,maxVal];}"
+    "  if(ticks[0]>minVal){ticks.unshift(Math.round(minVal*1e10)/1e10);}"
+    "  if(ticks[ticks.length-1]<maxVal){ticks.push(Math.round(maxVal*1e10)/1e10);}"
+    "  return ticks;"
+    "}"
+    "function niceLogTicks(minVal,maxVal){"
+    "  if(!Number.isFinite(minVal)||!Number.isFinite(maxVal)){return [];}"
+    "  if(minVal<=0||maxVal<=0||minVal>maxVal){return [];}"
+    "  const decadeMin=Math.floor(Math.log10(minVal));"
+    "  const decadeMax=Math.ceil(Math.log10(maxVal));"
+    "  const ticks=[];"
+    "  for(let d=decadeMin; d<=decadeMax; d++){"
+    "    const base=Math.pow(10,d);"
+    "    [1,2,5].forEach((m)=>{"
+    "      const value=m*base;"
+    "      if(value>=minVal && value<=maxVal){ticks.push(value);}"
+    "    });"
+    "  }"
+    "  return ticks;"
+    "}"
+    "function niceTicks(minVal,maxVal,options){"
+    "  const opts=options||{};"
+    "  if(opts.log){return niceLogTicks(minVal,maxVal);}"
+    "  return niceLinearTicks(minVal,maxVal,opts.target||6);"
+    "}"
+    "function formatFrequency(value){"
+    "  if(!Number.isFinite(value)){return 'n/a';}"
+    "  if(value>=1000){"
+    "    const k=value/1000;"
+    "    const fixed=k>=100?0:(k>=10?1:2);"
+    "    return `${k.toFixed(fixed)}k`;"
+    "  }"
+    "  if(value>=100){return value.toFixed(0);}"
+    "  if(value>=10){return value.toFixed(1);}"
+    "  return value.toFixed(2);"
+    "}"
+)
 
 
 def _build_confidence(
@@ -540,6 +700,7 @@ def _render_qcreport_viewer_section(
     )
     viewer_js = (
         "<script>"
+        + TICK_GENERATOR_JS +
         "const filesInput=document.getElementById('viewer-files');"
         "const fileInputWrap=document.getElementById('viewer-file-input');"
         "const listBody=document.querySelector('#viewer-list tbody');"
@@ -758,26 +919,34 @@ def _render_qcreport_viewer_section(
         "    if(idx===0){ctx.moveTo(x,y);}else{ctx.lineTo(x,y);}"
         "  });"
         "  ctx.stroke();"
-        "  const yTicks=5;"
+        "  const yTicks=niceTicks(minY,maxY,{log:false,target:6});"
         "  ctx.fillStyle='#666'; ctx.font='12px Arial,Helvetica,sans-serif';"
-        "  for(let i=0;i<=yTicks;i++){"
-        "    const t=minY+(i*(yRange/yTicks));"
+        "  yTicks.forEach((t)=>{"
         "    const y=padding.top+((maxY-t)/yRange)*hgt;"
         "    ctx.strokeStyle='#e0e0e0'; ctx.beginPath(); ctx.moveTo(padding.left,y); ctx.lineTo(padding.left+w,y); ctx.stroke();"
         "    ctx.strokeStyle='#888'; ctx.beginPath(); ctx.moveTo(padding.left-4,y); ctx.lineTo(padding.left,y); ctx.stroke();"
         "    const label=formatNumber(t)+(units?` ${units}`:'');"
         "    ctx.fillText(label,4,y+4);"
-        "  }"
-        "  const xTickVals=[minX, (minX+maxX)/2, maxX];"
+        "  });"
+        "  const xTickVals=niceTicks(minX,maxX,{log:useLog,target:6});"
+        "  const maxLabels=Math.max(3,Math.floor(w/70));"
+        "  const labelStep=Math.max(1,Math.ceil(xTickVals.length/maxLabels));"
+        "  const rotation=labelStep>1?-0.6:-0.35;"
         "  ctx.fillStyle='#666'; ctx.font='12px Arial,Helvetica,sans-serif';"
-        "  xTickVals.forEach((xVal)=>{"
+        "  xTickVals.forEach((xVal,idx)=>{"
+        "    if(idx%labelStep!==0){return;}"
         "    const raw=useLog?Math.log10(xVal):xVal;"
         "    const x=padding.left+((raw-xMin)/xRange)*w;"
         "    ctx.strokeStyle='#888'; ctx.beginPath(); ctx.moveTo(x,padding.top+hgt); ctx.lineTo(x,padding.top+hgt+6); ctx.stroke();"
-        "    const label=formatNumber(xVal)+' Hz';"
-        "    ctx.fillText(label,x-14,padding.top+hgt+18);"
+        "    const label=formatFrequency(xVal);"
+        "    ctx.save();"
+        "    ctx.translate(x,padding.top+hgt+18);"
+        "    ctx.rotate(rotation);"
+        "    ctx.textAlign='center';"
+        "    ctx.fillText(label,0,0);"
+        "    ctx.restore();"
         "  });"
-        "  const xAxisLabel=useLog?'Frequency (log10 Hz)':'Frequency (Hz)';"
+        "  const xAxisLabel=useLog?'Frequency (Hz, log scale)':'Frequency (Hz)';"
         "  const yAxisLabel=units?`Value (${units})`:'Value';"
         "  ctx.fillStyle='#555'; ctx.font='13px Arial,Helvetica,sans-serif';"
         "  ctx.textAlign='center';"
@@ -790,7 +959,7 @@ def _render_qcreport_viewer_section(
         "  ctx.textAlign='left';"
         "  const note=document.createElement('div');"
         "  note.className='viewer-note';"
-        "  const xLabel=useLog?'log10 Hz':'Hz';"
+        "  const xLabel=useLog?'Hz (log scale)':'Hz';"
         "  note.textContent=`${xLabel}, min ${formatNumber(minY)}${units?` ${units}`:''}, max ${formatNumber(maxY)}${units?` ${units}`:''}`;"
         "  const expand=document.createElement('button');"
         "  expand.className='viewer-expand';"

@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from spectraqc.cli.main import _compute_silence_ratio, _resample_linear, _build_confidence
+from spectraqc.cli.main import (
+    _compute_silence_ratio,
+    _resample_linear,
+    _build_confidence,
+    _nice_ticks_py,
+    TICK_GENERATOR_JS,
+)
 from spectraqc.types import AudioBuffer
 
 
@@ -36,3 +42,25 @@ def test_build_confidence_flags():
     )
     assert conf["status"] == "warn"
     assert "zero_length_audio" in conf["reasons"]
+
+
+def test_tick_generator_js_embedded():
+    assert "function niceTicks" in TICK_GENERATOR_JS
+
+
+def test_nice_ticks_linear_monotonic():
+    ticks = _nice_ticks_py(1.2, 9.8, log_scale=False, target=6)
+    assert 5 <= len(ticks) <= 7
+    assert ticks == sorted(ticks)
+    assert ticks[0] >= 1.2
+    assert ticks[-1] <= 9.8
+
+
+def test_nice_ticks_log_frequency():
+    ticks = _nice_ticks_py(20.0, 20000.0, log_scale=True)
+    expected = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+    for value in expected:
+        assert value in ticks
+    assert ticks == sorted(ticks)
+    assert ticks[0] >= 20.0
+    assert ticks[-1] <= 20000.0
