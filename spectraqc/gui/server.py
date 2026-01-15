@@ -521,7 +521,7 @@ def _build_index_html() -> str:
           out_path: document.getElementById("analyze-out").value,
           repro_md: document.getElementById("analyze-repro").value
         }});
-        setStatus(statusEl, `Status: ${data.status.toUpperCase()}`);
+        setStatus(statusEl, `Status: ${{data.status.toUpperCase()}}`);
         setResult(resultEl, JSON.stringify(data, null, 2));
       }} catch (err) {{
         setStatus(statusEl, err.message, true);
@@ -539,11 +539,11 @@ def _build_index_html() -> str:
           profile_path: document.getElementById("validate-profile").value,
           fail_on: document.getElementById("validate-fail-on").value
         }});
-        setStatus(statusEl, `Status: ${data.status.toUpperCase()}`);
-        const badge = `<span class="badge ${data.status}">${data.status.toUpperCase()}</span>`;
-        summaryEl.innerHTML = `<div class="row">${badge}<div class="muted">Exit code: ${data.exit_code}</div></div>`;
+        setStatus(statusEl, `Status: ${{data.status.toUpperCase()}}`);
+        const badge = `<span class="badge ${{data.status}}">${{data.status.toUpperCase()}}</span>`;
+        summaryEl.innerHTML = `<div class="row">${{badge}}<div class="muted">Exit code: ${{data.exit_code}}</div></div>`;
         if (data.summary_lines && data.summary_lines.length) {{
-          summaryEl.innerHTML += `<ul class="summary-list">${data.summary_lines.map((l) => `<li>${l}</li>`).join("")}</ul>`;
+          summaryEl.innerHTML += `<ul class="summary-list">${{data.summary_lines.map((l) => `<li>${{l}}</li>`).join("")}}</ul>`;
         }}
       }} catch (err) {{
         setStatus(statusEl, err.message, true);
@@ -562,7 +562,7 @@ def _build_index_html() -> str:
           out_path: document.getElementById("repair-out").value,
           report_path: document.getElementById("repair-report").value
         }});
-        setStatus(statusEl, `Status: ${data.status.toUpperCase()}`);
+        setStatus(statusEl, `Status: ${{data.status.toUpperCase()}}`);
         setResult(resultEl, JSON.stringify(data, null, 2));
       }} catch (err) {{
         setStatus(statusEl, err.message, true);
@@ -582,17 +582,17 @@ def _build_index_html() -> str:
         const profile = data.profile;
         summaryEl.innerHTML = `
           <div class="row">
-            <span class="pill">${profile.name}</span>
-            <span class="pill">${profile.kind}</span>
-            <span class="pill">v${profile.version}</span>
+            <span class="pill">${{profile.name}}</span>
+            <span class="pill">${{profile.kind}}</span>
+            <span class="pill">v${{profile.version}}</span>
           </div>
           <ul class="summary-list">
-            <li><strong>Hash:</strong> ${profile.hash}</li>
-            <li><strong>Bands:</strong> ${profile.band_count}</li>
-            <li><strong>Frequency grid:</strong> ${profile.grid_bins} bins (${profile.freq_min} - ${profile.freq_max} Hz)</li>
-            <li><strong>Band mean thresholds:</strong> pass ${profile.band_mean_pass} dB, warn ${profile.band_mean_warn} dB</li>
-            <li><strong>Band max thresholds:</strong> pass ${profile.band_max_pass} dB, warn ${profile.band_max_warn} dB</li>
-            <li><strong>Tilt thresholds:</strong> pass ${profile.tilt_pass} dB/oct, warn ${profile.tilt_warn} dB/oct</li>
+            <li><strong>Hash:</strong> ${{profile.hash}}</li>
+            <li><strong>Bands:</strong> ${{profile.band_count}}</li>
+            <li><strong>Frequency grid:</strong> ${{profile.grid_bins}} bins (${{profile.freq_min}} - ${{profile.freq_max}} Hz)</li>
+            <li><strong>Band mean thresholds:</strong> pass ${{profile.band_mean_pass}} dB, warn ${{profile.band_mean_warn}} dB</li>
+            <li><strong>Band max thresholds:</strong> pass ${{profile.band_max_pass}} dB, warn ${{profile.band_max_warn}} dB</li>
+            <li><strong>Tilt thresholds:</strong> pass ${{profile.tilt_pass}} dB/oct, warn ${{profile.tilt_warn}} dB/oct</li>
           </ul>`;
       }} catch (err) {{
         setStatus(statusEl, err.message, true);
@@ -622,16 +622,16 @@ def _build_index_html() -> str:
       }};
       try {{
         const data = await postJSON("/api/batch", payload);
-        setStatus(statusEl, `Completed: ${data.total_files} files`);
+        setStatus(statusEl, `Completed: ${{data.total_files}} files`);
         const outputs = data.outputs || {{}};
         resultEl.innerHTML = `
           <div class="row">
-            <span class="badge ${data.status}">${data.status.toUpperCase()}</span>
-            <div class="muted">Failures: ${data.failures}</div>
+            <span class="badge ${{data.status}}">${{data.status.toUpperCase()}}</span>
+            <div class="muted">Failures: ${{data.failures}}</div>
           </div>
-          <div class="result" style="margin-top:12px;">${JSON.stringify(data.summary, null, 2)}</div>
+          <div class="result" style="margin-top:12px;">${{JSON.stringify(data.summary, null, 2)}}</div>
           <ul class="summary-list">
-            ${Object.entries(outputs).map(([key, value]) => value ? `<li><strong>${key}:</strong> ${value}</li>` : "").join("")}
+            ${{Object.entries(outputs).map(([key, value]) => value ? `<li><strong>${{key}}:</strong> ${{value}}</li>` : "").join("")}}
           </ul>`;
       }} catch (err) {{
         setStatus(statusEl, err.message, true);
@@ -671,17 +671,17 @@ def _build_index_html() -> str:
           const details = `
             <div class="card" style="margin-top:12px;">
               <div class="row">
-                <span class="pill">${file.name}</span>
-                <span class="badge ${status}">${status.toUpperCase()}</span>
-                <span class="muted">Confidence: ${confidence}</span>
+                <span class="pill">${{file.name}}</span>
+                <span class="badge ${{status}}">${{status.toUpperCase()}}</span>
+                <span class="muted">Confidence: ${{confidence}}</span>
               </div>
               <ul class="summary-list">
-                ${(reasons.length ? reasons : ["no confidence warnings"]).map((r) => `<li>${r}</li>`).join("")}
+                ${{(reasons.length ? reasons : ["no confidence warnings"]).map((r) => `<li>${{r}}</li>`).join("")}}
               </ul>
             </div>`;
           viewerList.innerHTML += details;
         }} catch (err) {{
-          viewerList.innerHTML += `<div class="card" style="margin-top:12px;"><strong>${file.name}</strong>: invalid JSON</div>`;
+          viewerList.innerHTML += `<div class="card" style="margin-top:12px;"><strong>${{file.name}}</strong>: invalid JSON</div>`;
         }}
       }}
     }});

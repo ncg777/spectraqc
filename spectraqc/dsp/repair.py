@@ -6,7 +6,6 @@ from typing import Callable
 
 import numpy as np
 
-from spectraqc.analysis.ltpsd import compute_ltpsd
 from spectraqc.metrics.deviation import deviation_curve_db
 from spectraqc.metrics.truepeak import true_peak_dbtp_mono
 from spectraqc.metrics.loudness import integrated_lufs_mono
@@ -71,6 +70,9 @@ def compute_deviation_curve(
     profile: ReferenceProfile
 ) -> np.ndarray:
     """Compute deviation curve for a mono buffer using profile grid."""
+    # Local import avoids circular dependency during package initialization.
+    from spectraqc.analysis.ltpsd import compute_ltpsd
+
     x = _mono_view(samples)
     analysis_lock = profile.analysis_lock or {}
     nfft = int(analysis_lock.get("fft_size", 4096))
