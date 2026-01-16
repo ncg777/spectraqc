@@ -336,7 +336,8 @@ spectraqc inspect-ref --profile validation/profiles/streaming_generic_v1.ref.jso
           "properties": {
             "spectral_tilt_db_per_oct": { "type": "number" },
             "tilt_deviation_db_per_oct": { "type": "number" },
-            "true_peak_dbtp": { "type": "number" }
+            "true_peak_dbtp": { "type": "number" },
+            "lra_lu": { "type": "number" }
           },
           "additionalProperties": false
         }
@@ -480,6 +481,7 @@ class GlobalMetrics:
     tilt_deviation_db_per_oct: float
     true_peak_dbtp: float | None = None
     lufs_i: float | None = None
+    lra_lu: float | None = None
 
 @dataclass(frozen=True)
 class ThresholdResult:

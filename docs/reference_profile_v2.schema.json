@@ -212,6 +212,15 @@
                 "warn": { "type": "number" }
               },
               "additionalProperties": false
+            },
+            "loudness_range": {
+              "type": "object",
+              "required": ["pass", "warn"],
+              "properties": {
+                "pass": { "type": "number" },
+                "warn": { "type": "number" }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false

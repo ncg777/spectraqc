@@ -291,6 +291,31 @@ def evaluate(
         if crest_stat == Status.FAIL:
             any_fail = True
 
+    if global_metrics.lra_lu is not None and "lra_lu" in thresholds:
+        lra_pass, lra_warn = thresholds["lra_lu"]
+        lra_stat = _status_high_is_bad(float(global_metrics.lra_lu), lra_pass, lra_warn)
+        global_decisions.append(
+            ThresholdResult(
+                metric="loudness_range",
+                value=float(global_metrics.lra_lu),
+                units="LU",
+                status=lra_stat,
+                pass_limit=lra_pass,
+                warn_limit=lra_warn,
+                notes=_explain(
+                    metric="loudness_range",
+                    value=float(global_metrics.lra_lu),
+                    units="LU",
+                    status=lra_stat,
+                    pass_lim=lra_pass,
+                    warn_lim=lra_warn,
+                    compare="above"
+                )
+            )
+        )
+        if lra_stat == Status.FAIL:
+            any_fail = True
+
     # Tonal peak evaluation if configured
     if (
         global_metrics.tonal_peak_max_delta_db is not None

@@ -168,6 +168,7 @@ def build_reference_profile(
                 "peak_dbfs": {"pass": -1.0, "warn": -0.3},
                 "rms_dbfs": {"pass": -20.0, "warn": -14.0},
                 "crest_factor_db": {"pass": 12.0, "warn": 8.0},
+                "loudness_range": {"pass": 12.0, "warn": 18.0},
                 "tonal_peak": {"pass": 6.0, "warn": 10.0},
             },
             "aggregation": {

@@ -98,6 +98,13 @@ def load_reference_profile(path: str) -> ReferenceProfile:
             float(crest_rules["warn"]),
         )
 
+    lra_rules = tm.get("loudness_range")
+    if lra_rules:
+        thresholds["lra_lu"] = (
+            float(lra_rules["pass"]),
+            float(lra_rules["warn"]),
+        )
+
     tonal_rules = tm.get("tonal_peak")
     if tonal_rules:
         thresholds["tonal_peak_delta_db"] = (
