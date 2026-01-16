@@ -20,6 +20,7 @@ import soundfile as sf
 from spectraqc.version import __version__
 from spectraqc.types import Status, GlobalMetrics
 from spectraqc.io.audio import load_audio, apply_channel_policy
+from spectraqc.io.policy import evaluate_input_policy
 from spectraqc.analysis.ltpsd import compute_ltpsd
 from spectraqc.metrics.grid import interp_to_grid, interp_var_ratio
 from spectraqc.metrics.smoothing import smooth_octave_fraction, smooth_log_hz
@@ -1334,6 +1335,10 @@ def _analyze_audio(
     
     # Load audio
     audio = load_audio(audio_path)
+    input_policy_cfg = getattr(profile, "input_policy", {}) or {}
+    input_policy_result = evaluate_input_policy(
+        input_policy_cfg, audio=audio, audio_path=audio_path
+    )
 
     # Analysis parameters (from profile or defaults)
     analysis_lock = profile.analysis_lock or {}
@@ -2022,6 +2027,17 @@ def _analyze_audio(
         )
     }
 
+    if input_policy_result.get("status") in {Status.WARN.value, Status.FAIL.value}:
+        decisions_dict["flags"].append(
+            {
+                "rule_id": "input_policy",
+                "status": input_policy_result["status"],
+                "measurements": {
+                    "checks": input_policy_result.get("checks", []),
+                },
+            }
+        )
+
     if "inter_channel_delay" in global_metrics_dict:
         delay_decision = next(
             (
@@ -2091,7 +2107,13 @@ def _analyze_audio(
         },
         decisions=decisions_dict,
         confidence=confidence,
-        repair=repair
+        repair=repair,
+        policy={
+            "input": {
+                "config": input_policy_cfg,
+                "evaluation": input_policy_result,
+            }
+        },
     )
     
     return qcreport, decision, profile, algo_ids

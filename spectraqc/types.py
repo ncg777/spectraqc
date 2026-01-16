@@ -121,6 +121,7 @@ class ReferenceProfile:
     bands: list[FrequencyBand]
     thresholds: dict
     analysis_lock: dict
+    input_policy: dict
     algorithm_registry: dict
     normalization: dict  # policy-driven: loudness + true peak
     noise_floor_by_band: dict[str, float] = field(default_factory=dict)

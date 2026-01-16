@@ -6223,6 +6223,33 @@
       }
     }
   },
+  "input_policy": {
+    "accepted_formats": [
+      ".aif",
+      ".aiff",
+      ".flac",
+      ".mp3",
+      ".wav"
+    ],
+    "sample_rate_hz": {
+      "min": 8000.0,
+      "max": 192000.0
+    },
+    "channels": {
+      "allowed": [
+        1,
+        2
+      ]
+    },
+    "duration_s": {
+      "min": 0.1
+    },
+    "decode_backends": [
+      "soundfile",
+      "ffmpeg"
+    ],
+    "warn_on_decode_warnings": true
+  },
   "algorithm_registry": {
     "ltpsd_welch_hann_powerhz_v1": {
       "id": "ltpsd_welch_hann_powerhz_v1",

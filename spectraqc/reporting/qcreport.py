@@ -28,6 +28,7 @@ def build_qcreport_dict(
     decisions: dict,
     confidence: dict,
     repair: dict | None = None,
+    policy: dict | None = None,
     cohort_id: str | None = None,
     department: str | None = None,
     campaign: str | None = None
@@ -95,6 +96,9 @@ def build_qcreport_dict(
 
     if repair is not None:
         report["repair"] = repair
+
+    if policy is not None:
+        report["policy"] = policy
 
     if noise_floor is not None:
         report["metrics"]["noise_floor"] = noise_floor
