@@ -259,6 +259,24 @@ def build_reference_profile(
                     "pass": 0.0005,
                     "warn": 0.001,
                 },
+                "channel_consistency": {
+                    "declared": "mono",
+                    "frame_seconds": 0.5,
+                    "hop_seconds": 0.25,
+                    "mono": {
+                        "corr_min": {"pass": 0.995, "warn": 0.99},
+                        "side_max_db": {"pass": -60.0, "warn": -50.0},
+                    },
+                    "stereo": {
+                        "corr": {
+                            "pass_min": -0.2,
+                            "pass_max": 0.98,
+                            "warn_min": -0.4,
+                            "warn_max": 1.0,
+                        },
+                        "side_min_db": {"pass": -30.0, "warn": -40.0},
+                    },
+                },
                 "clipped_samples": DEFAULT_LEVEL_METRIC_THRESHOLDS["clipped_samples"],
                 "clipped_runs": DEFAULT_LEVEL_METRIC_THRESHOLDS["clipped_runs"],
                 "broadband_transients": {

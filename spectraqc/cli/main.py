@@ -52,6 +52,7 @@ from spectraqc.metrics.correlation import (
     estimate_interchannel_delay,
     sign_inverted_correlation_summary,
 )
+from spectraqc.metrics.channel_consistency import channel_consistency_metrics
 from spectraqc.dsp.repair import apply_repair_plan, compute_repair_metrics
 from spectraqc.algorithms.registry import (
     build_algorithm_registry,
@@ -1350,11 +1351,13 @@ def _analyze_audio(
     channel_policy = str(analysis_lock.get("channel_policy", "mono")).strip().lower()
     corr_cfg = profile.thresholds.get("stereo_correlation", {})
     delay_cfg = profile.thresholds.get("inter_channel_delay", {})
+    channel_consistency_cfg = profile.thresholds.get("channel_consistency", {})
     corr_stats = None
     corr_frame_seconds = None
     corr_hop_seconds = None
     sign_inverted_stats = None
     delay_stats = None
+    channel_consistency_stats = None
     if corr_cfg and audio.channels == 2:
         corr_frame_seconds = float(corr_cfg.get("frame_seconds", 0.5))
         corr_hop_seconds = float(corr_cfg.get("hop_seconds", 0.25))
@@ -1377,6 +1380,13 @@ def _analyze_audio(
             audio.samples,
             audio.fs,
             max_delay_seconds=float(delay_cfg.get("max_delay_seconds", 0.01)),
+        )
+    if channel_consistency_cfg and audio.channels == 2:
+        channel_consistency_stats = channel_consistency_metrics(
+            audio.samples,
+            audio.fs,
+            frame_seconds=float(channel_consistency_cfg.get("frame_seconds", 0.5)),
+            hop_seconds=float(channel_consistency_cfg.get("hop_seconds", 0.25)),
         )
     silence_defaults = profile.thresholds.get("silence_detection", {})
     silence_override = analysis_lock.get("silence_detection", {})
@@ -1673,6 +1683,22 @@ def _analyze_audio(
             inter_channel_delay_seconds=None if delay_stats is None else delay_stats.get("delay_seconds"),
             inter_channel_delay_samples=None if delay_stats is None else delay_stats.get("delay_samples"),
             inter_channel_delay_correlation=None if delay_stats is None else delay_stats.get("correlation"),
+            channel_consistency_declared=(
+                None
+                if not channel_consistency_cfg
+                else str(channel_consistency_cfg.get("declared", "stereo"))
+            ),
+            channel_consistency_corr_mean=(
+                None if channel_consistency_stats is None else channel_consistency_stats.get("corr_mean")
+            ),
+            channel_consistency_corr_min=(
+                None if channel_consistency_stats is None else channel_consistency_stats.get("corr_min")
+            ),
+            channel_consistency_side_mid_ratio_db=(
+                None
+                if channel_consistency_stats is None
+                else channel_consistency_stats.get("side_mid_ratio_db")
+            ),
         )
 
         spectral_artifacts = detect_spectral_artifacts(
@@ -1894,6 +1920,18 @@ def _analyze_audio(
             "correlation": delay_stats.get("correlation"),
             "max_delay_seconds": None if delay_cfg is None else delay_cfg.get("max_delay_seconds"),
         }
+    if channel_consistency_stats:
+        global_metrics_dict["channel_consistency"] = {
+            "declared": str(channel_consistency_cfg.get("declared", "stereo")),
+            "frame_seconds": channel_consistency_cfg.get("frame_seconds"),
+            "hop_seconds": channel_consistency_cfg.get("hop_seconds"),
+            "corr_mean": channel_consistency_stats.get("corr_mean"),
+            "corr_min": channel_consistency_stats.get("corr_min"),
+            "corr_count": channel_consistency_stats.get("corr_count"),
+            "mid_rms_dbfs": channel_consistency_stats.get("mid_rms_dbfs"),
+            "side_rms_dbfs": channel_consistency_stats.get("side_rms_dbfs"),
+            "side_mid_ratio_db": channel_consistency_stats.get("side_mid_ratio_db"),
+        }
 
     sign_inverted_flags: list[dict] = []
     sign_inverted_decision = next(
@@ -2002,6 +2040,26 @@ def _analyze_audio(
             )
             global_metrics_dict["inter_channel_delay"]["warn_limit"] = (
                 delay_decision.warn_limit
+            )
+
+    if "channel_consistency" in global_metrics_dict:
+        consistency_decision = next(
+            (
+                gd
+                for gd in decision.global_decisions
+                if gd.metric == "channel_consistency"
+            ),
+            None,
+        )
+        if consistency_decision is not None:
+            global_metrics_dict["channel_consistency"]["status"] = (
+                consistency_decision.status.value
+            )
+            global_metrics_dict["channel_consistency"]["pass_limit"] = (
+                consistency_decision.pass_limit
+            )
+            global_metrics_dict["channel_consistency"]["warn_limit"] = (
+                consistency_decision.warn_limit
             )
     
     # Confidence assessment

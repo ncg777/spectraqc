@@ -354,6 +354,22 @@ def build_qcreport_dict(
         if "warn_limit" in delay and delay["warn_limit"] is not None:
             delay["warn_limit"] = q(float(delay["warn_limit"]), 0.0001)
 
+    if "channel_consistency" in gm:
+        consistency = gm["channel_consistency"]
+        for key in ("frame_seconds", "hop_seconds"):
+            if key in consistency and consistency[key] is not None:
+                consistency[key] = q(float(consistency[key]), 0.001)
+        for key in ("corr_mean", "corr_min"):
+            if key in consistency and consistency[key] is not None:
+                consistency[key] = q(float(consistency[key]), 0.001)
+        for key in ("mid_rms_dbfs", "side_rms_dbfs", "side_mid_ratio_db"):
+            if key in consistency and consistency[key] is not None:
+                consistency[key] = q(float(consistency[key]), 0.01)
+        if "pass_limit" in consistency and consistency["pass_limit"] is not None:
+            consistency["pass_limit"] = q(float(consistency["pass_limit"]), 0.01)
+        if "warn_limit" in consistency and consistency["warn_limit"] is not None:
+            consistency["warn_limit"] = q(float(consistency["warn_limit"]), 0.01)
+
     if report.get("repair"):
         repair_metrics = report["repair"].get("metrics", {})
         for key in ("before", "after", "delta"):
