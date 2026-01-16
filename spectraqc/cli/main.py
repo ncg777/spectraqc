@@ -29,6 +29,7 @@ from spectraqc.metrics.tilt import spectral_tilt_db_per_oct
 from spectraqc.metrics.brickwall import detect_spectral_artifacts
 from spectraqc.metrics.tonal import detect_tonal_peaks
 from spectraqc.metrics.truepeak import true_peak_dbtp_mono
+from spectraqc.metrics.noise import noise_floor_dbfs_mono
 from spectraqc.metrics.levels import (
     peak_dbfs_mono,
     rms_dbfs_mono,
@@ -1399,6 +1400,10 @@ def _analyze_audio(
         peak_dbfs = peak_dbfs_mono(analysis_buffer.samples)
         rms_dbfs = rms_dbfs_mono(analysis_buffer.samples)
         crest_factor_db = crest_factor_db_mono(analysis_buffer.samples)
+        noise_floor_dbfs = noise_floor_dbfs_mono(
+            analysis_buffer.samples,
+            analysis_buffer.fs,
+        )
 
         try:
             lufs_i, lra_lu = loudness_metrics_mono(
@@ -1429,6 +1434,7 @@ def _analyze_audio(
             lufs_i=lufs_i,
             lra_lu=lra_lu,
             tonal_peak_max_delta_db=tonal_peak_max_delta,
+            noise_floor_dbfs=noise_floor_dbfs,
         )
 
         spectral_artifacts = detect_spectral_artifacts(
@@ -1455,6 +1461,7 @@ def _analyze_audio(
             "delta_db": delta_db,
             "band_metrics": bm,
             "global_metrics": global_metrics,
+            "noise_floor_dbfs": noise_floor_dbfs,
             "tonal_peaks": tonal_peaks,
             "decision": decision,
             "spectral_artifacts": spectral_artifacts,
@@ -1462,6 +1469,7 @@ def _analyze_audio(
         }
 
     results = [_analyze_single(buf) for buf in analysis_buffers]
+    per_channel_noise_floor_dbfs = [r["noise_floor_dbfs"] for r in results]
     worst_idx = 0
     if len(results) > 1:
         order = {Status.PASS: 0, Status.WARN: 1, Status.FAIL: 2}
@@ -1477,6 +1485,7 @@ def _analyze_audio(
     delta_db = chosen["delta_db"]
     bm = chosen["band_metrics"]
     global_metrics = chosen["global_metrics"]
+    noise_floor_dbfs = chosen["noise_floor_dbfs"]
     tonal_peaks = chosen.get("tonal_peaks", [])
     decision = chosen["decision"]
     spectral_artifacts = chosen.get("spectral_artifacts", {})
@@ -1572,6 +1581,8 @@ def _analyze_audio(
         global_metrics_dict["peak_dbfs"] = global_metrics.peak_dbfs
     if global_metrics.rms_dbfs is not None:
         global_metrics_dict["rms_dbfs"] = global_metrics.rms_dbfs
+    if global_metrics.noise_floor_dbfs is not None:
+        global_metrics_dict["noise_floor_dbfs"] = global_metrics.noise_floor_dbfs
     if global_metrics.crest_factor_db is not None:
         global_metrics_dict["crest_factor_db"] = global_metrics.crest_factor_db
     if global_metrics.lra_lu is not None:
@@ -1657,6 +1668,11 @@ def _analyze_audio(
         delta_mean_db=delta_db,
         band_metrics=band_metrics_list,
         global_metrics=global_metrics_dict,
+        noise_floor={
+            "policy": str(channel_policy),
+            "by_channel_dbfs": per_channel_noise_floor_dbfs,
+            "merged_dbfs": noise_floor_dbfs,
+        },
         decisions=decisions_dict,
         confidence=confidence,
         repair=repair
@@ -1857,6 +1873,12 @@ def cmd_inspect_ref(args) -> int:
         print(f"  Band mean (default): pass={profile.thresholds['band_mean_db']['default'][0]:.1f}dB, warn={profile.thresholds['band_mean_db']['default'][1]:.1f}dB")
         print(f"  Band max (default): pass={profile.thresholds['band_max_db']['all'][0]:.1f}dB, warn={profile.thresholds['band_max_db']['all'][1]:.1f}dB")
         print(f"  Tilt: pass={profile.thresholds['tilt_db_per_oct'][0]:.2f}dB/oct, warn={profile.thresholds['tilt_db_per_oct'][1]:.2f}dB/oct")
+        if "noise_floor_dbfs" in profile.thresholds:
+            print(
+                "  Noise floor: pass="
+                f"{profile.thresholds['noise_floor_dbfs'][0]:.1f}dBFS, warn="
+                f"{profile.thresholds['noise_floor_dbfs'][1]:.1f}dBFS"
+            )
         print()
         print(f"Frequency grid: {len(profile.freqs_hz)} bins, {profile.freqs_hz[0]:.1f} - {profile.freqs_hz[-1]:.1f} Hz")
         

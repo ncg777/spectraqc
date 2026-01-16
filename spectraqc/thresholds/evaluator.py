@@ -264,6 +264,33 @@ def evaluate(
         if rms_stat == Status.FAIL:
             any_fail = True
 
+    if global_metrics.noise_floor_dbfs is not None and "noise_floor_dbfs" in thresholds:
+        noise_pass, noise_warn = thresholds["noise_floor_dbfs"]
+        noise_stat = _status_high_is_bad(
+            float(global_metrics.noise_floor_dbfs), noise_pass, noise_warn
+        )
+        global_decisions.append(
+            ThresholdResult(
+                metric="noise_floor",
+                value=float(global_metrics.noise_floor_dbfs),
+                units="dBFS",
+                status=noise_stat,
+                pass_limit=noise_pass,
+                warn_limit=noise_warn,
+                notes=_explain(
+                    metric="noise_floor",
+                    value=float(global_metrics.noise_floor_dbfs),
+                    units="dBFS",
+                    status=noise_stat,
+                    pass_lim=noise_pass,
+                    warn_lim=noise_warn,
+                    compare="above"
+                )
+            )
+        )
+        if noise_stat == Status.FAIL:
+            any_fail = True
+
     if global_metrics.crest_factor_db is not None and "crest_factor_db" in thresholds:
         crest_pass, crest_warn = thresholds["crest_factor_db"]
         crest_stat = _status_low_is_bad(
