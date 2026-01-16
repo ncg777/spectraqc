@@ -8,6 +8,7 @@ import sys
 import platform
 import os
 import math
+import re
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Iterable
 from datetime import datetime, timezone
@@ -395,6 +396,89 @@ def _build_confidence(
         "reasons": reasons,
         "downgraded": bool(reasons)
     }
+
+
+_DECODE_ANOMALY_RULES = [
+    {
+        "rule_id": "decode_dropouts",
+        "category": "dropouts",
+        "warn_threshold": 1,
+        "fail_threshold": 3,
+        "patterns": [
+            r"\bdropout\b",
+            r"\bmissing\b.*\b(packets?|frames?|samples?)\b",
+            r"\bcorrupt(?:ed)?\b",
+            r"\bdiscontinuity\b",
+            r"\berror while decoding\b",
+        ],
+    },
+    {
+        "rule_id": "decode_repeated_blocks",
+        "category": "repeated_blocks",
+        "warn_threshold": 1,
+        "fail_threshold": 2,
+        "patterns": [
+            r"\blast message repeated\b",
+            r"\brepeat(?:ed)?\b",
+            r"\bduplicat(?:e|ed|ing)\b",
+            r"\bduplicate\b",
+        ],
+    },
+    {
+        "rule_id": "decode_frame_warnings",
+        "category": "frame_decode_warnings",
+        "warn_threshold": 1,
+        "fail_threshold": 3,
+        "patterns": [
+            r"\bframe\b",
+            r"\bdecoded fewer frames\b",
+            r"\btrimmed partial frame\b",
+            r"\binvalid frame\b",
+        ],
+    },
+]
+
+
+def _analyze_decode_warnings(warnings: list[str]) -> list[dict]:
+    """Classify decode warning logs into anomaly categories."""
+    if not warnings:
+        return []
+    anomalies: list[dict] = []
+    for rule in _DECODE_ANOMALY_RULES:
+        matches: list[str] = []
+        for warning in warnings:
+            warning_text = str(warning)
+            if any(re.search(pattern, warning_text, re.IGNORECASE) for pattern in rule["patterns"]):
+                matches.append(warning_text)
+        count = len(matches)
+        if count == 0:
+            continue
+        status = Status.PASS
+        if count >= rule["fail_threshold"]:
+            status = Status.FAIL
+        elif count >= rule["warn_threshold"]:
+            status = Status.WARN
+        evidence: list[str] = []
+        seen: set[str] = set()
+        for warning_text in matches:
+            if warning_text in seen:
+                continue
+            evidence.append(warning_text)
+            seen.add(warning_text)
+            if len(evidence) >= 5:
+                break
+        anomalies.append(
+            {
+                "rule_id": rule["rule_id"],
+                "category": rule["category"],
+                "status": status.value,
+                "count": count,
+                "warn_threshold": rule["warn_threshold"],
+                "fail_threshold": rule["fail_threshold"],
+                "evidence": evidence,
+            }
+        )
+    return anomalies
 
 
 def _compute_silence_ratio(
@@ -1347,6 +1431,7 @@ def _analyze_audio(
     input_policy_result = evaluate_input_policy(
         input_policy_cfg, audio=audio, audio_path=audio_path
     )
+    decode_anomalies = _analyze_decode_warnings(audio.warnings)
 
     # Analysis parameters (from profile or defaults)
     analysis_lock = profile.analysis_lock or {}
@@ -2048,6 +2133,22 @@ def _analyze_audio(
             }
         )
 
+    for anomaly in decode_anomalies:
+        if anomaly.get("status") in {Status.WARN.value, Status.FAIL.value}:
+            decisions_dict["flags"].append(
+                {
+                    "rule_id": anomaly.get("rule_id", "decode_warning"),
+                    "status": anomaly.get("status"),
+                    "measurements": {
+                        "category": anomaly.get("category"),
+                        "count": anomaly.get("count"),
+                        "warn_threshold": anomaly.get("warn_threshold"),
+                        "fail_threshold": anomaly.get("fail_threshold"),
+                        "evidence": anomaly.get("evidence", []),
+                    },
+                }
+            )
+
     if "inter_channel_delay" in global_metrics_dict:
         delay_decision = next(
             (
@@ -2098,6 +2199,8 @@ def _analyze_audio(
     
     # Build final report
     input_meta = _build_input_meta(audio_path, audio, audio.fs, audio.duration)
+    if decode_anomalies:
+        input_meta["decode_anomalies"] = decode_anomalies
     metadata_checks = [
         check
         for check in input_policy_result.get("checks", [])
