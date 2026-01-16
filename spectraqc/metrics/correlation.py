@@ -83,3 +83,58 @@ def correlation_summary(
         "min": float(np.min(finite)),
         "count": int(finite.size),
     }
+
+
+def estimate_interchannel_delay(
+    samples: np.ndarray,
+    fs: float,
+    *,
+    max_delay_seconds: float = 0.01,
+) -> dict:
+    """
+    Estimate inter-channel delay using cross-correlation for stereo audio.
+
+    Args:
+        samples: Stereo audio samples shaped (n, 2).
+        fs: Sample rate in Hz.
+        max_delay_seconds: Maximum absolute delay to search in seconds.
+
+    Returns:
+        Dictionary with delay in seconds/samples and correlation value.
+    """
+    x = np.asarray(samples, dtype=np.float64)
+    if x.ndim != 2 or x.shape[1] != 2:
+        raise ValueError("Expected stereo samples with shape (n, 2).")
+    if x.size == 0:
+        return {"delay_seconds": None, "delay_samples": None, "correlation": None}
+    max_delay_seconds = float(max_delay_seconds)
+    if max_delay_seconds <= 0:
+        raise ValueError("max_delay_seconds must be > 0.")
+
+    left = x[:, 0] - np.mean(x[:, 0])
+    right = x[:, 1] - np.mean(x[:, 1])
+    denom = float(np.linalg.norm(left) * np.linalg.norm(right))
+    corr = np.correlate(left, right, mode="full")
+    if denom > 0:
+        corr = corr / denom
+    else:
+        corr = np.zeros_like(corr, dtype=np.float64)
+
+    n = x.shape[0]
+    lags = np.arange(-n + 1, n, dtype=np.int64)
+    max_delay_samples = int(round(max_delay_seconds * float(fs)))
+    if max_delay_samples < 1:
+        max_delay_samples = 1
+    window = np.abs(lags) <= max_delay_samples
+    if not np.any(window):
+        return {"delay_seconds": None, "delay_samples": None, "correlation": None}
+    corr_window = corr[window]
+    lags_window = lags[window]
+    idx = int(np.argmax(np.abs(corr_window)))
+    lag = int(lags_window[idx])
+    delay_seconds = float(lag) / float(fs)
+    return {
+        "delay_seconds": delay_seconds,
+        "delay_samples": int(lag),
+        "correlation": float(corr_window[idx]),
+    }

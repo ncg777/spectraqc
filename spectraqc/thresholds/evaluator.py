@@ -580,6 +580,37 @@ def evaluate(
         if min_stat == Status.FAIL:
             any_fail = True
 
+    if (
+        global_metrics.inter_channel_delay_seconds is not None
+        and "inter_channel_delay" in thresholds
+    ):
+        delay_cfg = thresholds["inter_channel_delay"]
+        delay_pass = float(delay_cfg["pass"])
+        delay_warn = float(delay_cfg["warn"])
+        delay_value = float(global_metrics.inter_channel_delay_seconds)
+        delay_stat = _status_abs(abs(delay_value), delay_pass, delay_warn)
+        global_decisions.append(
+            ThresholdResult(
+                metric="inter_channel_delay_seconds",
+                value=delay_value,
+                units="s",
+                status=delay_stat,
+                pass_limit=delay_pass,
+                warn_limit=delay_warn,
+                notes=_explain(
+                    metric="inter_channel_delay_seconds",
+                    value=delay_value,
+                    units="s",
+                    status=delay_stat,
+                    pass_lim=delay_pass,
+                    warn_lim=delay_warn,
+                    compare="outside absolute",
+                ),
+            )
+        )
+        if delay_stat == Status.FAIL:
+            any_fail = True
+
     # Tonal peak evaluation if configured
     if (
         global_metrics.tonal_peak_max_delta_db is not None
