@@ -21,6 +21,21 @@ The documentation below is authoritative for the behavior of the current codebas
 - Contribution guide: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - Code of Conduct: see [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
 
+## Installation
+
+```bash
+pip install spectraqc
+```
+
+External dependencies:
+- `ffmpeg` is required for loudness measurement (ITU-R BS.1770 via `ebur128`) and for decoding when `soundfile` is unavailable.
+
+## Quickstart
+
+```bash
+spectraqc analyze path/to/audio.wav --profile path/to/profile.ref.json --out report.json
+```
+
 ## Formal specification
 
 ### Terminology
