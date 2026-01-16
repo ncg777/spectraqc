@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import numpy as np
 from spectraqc.types import ReferenceProfile, FrequencyBand
+from spectraqc.thresholds.brickwall import build_spectral_artifact_config
 from spectraqc.profiles.validator import validate_reference_profile_dict
 
 
@@ -70,6 +71,9 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         ),
         "_ref_var_db2": ref_var,
         "_smoothing": analysis_lock.get("smoothing", {"type": "none"}),
+        "spectral_artifacts": build_spectral_artifact_config(
+            tm.get("spectral_artifacts")
+        ),
     }
 
     # True peak threshold if enabled

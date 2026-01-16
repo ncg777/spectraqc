@@ -26,6 +26,7 @@ from spectraqc.metrics.smoothing import smooth_octave_fraction, smooth_log_hz
 from spectraqc.metrics.deviation import deviation_curve_db
 from spectraqc.metrics.integration import band_metrics
 from spectraqc.metrics.tilt import spectral_tilt_db_per_oct
+from spectraqc.metrics.brickwall import detect_spectral_artifacts
 from spectraqc.metrics.truepeak import true_peak_dbtp_mono
 from spectraqc.metrics.loudness import integrated_lufs_mono
 from spectraqc.dsp.repair import apply_repair_plan, compute_repair_metrics
@@ -37,6 +38,7 @@ from spectraqc.algorithms.registry import (
 )
 from spectraqc.profiles.loader import load_reference_profile
 from spectraqc.thresholds.evaluator import evaluate
+from spectraqc.thresholds.brickwall import evaluate_spectral_artifacts
 from spectraqc.reporting.qcreport import build_qcreport_dict
 from spectraqc.reporting.batch_summary import (
     build_batch_summary,
@@ -1400,6 +1402,18 @@ def _analyze_audio(
             lufs_i=lufs_i
         )
 
+        spectral_artifacts = detect_spectral_artifacts(
+            profile.freqs_hz,
+            input_mean_db,
+            expected_max_hz=float(profile.freqs_hz[-1]),
+            config=profile.thresholds.get("spectral_artifacts", {})
+        )
+        spectral_flags = evaluate_spectral_artifacts(
+            spectral_artifacts,
+            expected_max_hz=float(profile.freqs_hz[-1]),
+            config=profile.thresholds.get("spectral_artifacts", {})
+        )
+
         decision = evaluate(bm, global_metrics, profile.thresholds)
         return {
             "analysis_buffer": analysis_buffer,
@@ -1412,7 +1426,9 @@ def _analyze_audio(
             "delta_db": delta_db,
             "band_metrics": bm,
             "global_metrics": global_metrics,
-            "decision": decision
+            "decision": decision,
+            "spectral_artifacts": spectral_artifacts,
+            "spectral_flags": spectral_flags
         }
 
     results = [_analyze_single(buf) for buf in analysis_buffers]
@@ -1432,6 +1448,8 @@ def _analyze_audio(
     bm = chosen["band_metrics"]
     global_metrics = chosen["global_metrics"]
     decision = chosen["decision"]
+    spectral_artifacts = chosen.get("spectral_artifacts", {})
+    spectral_flags = chosen.get("spectral_flags", [])
     tp_dbtp = global_metrics.true_peak_dbtp
     lufs_i = global_metrics.lufs_i
     analysis_buffer = chosen["analysis_buffer"]
@@ -1518,6 +1536,8 @@ def _analyze_audio(
     }
     if global_metrics.true_peak_dbtp is not None:
         global_metrics_dict["true_peak_dbtp"] = global_metrics.true_peak_dbtp
+    if spectral_artifacts:
+        global_metrics_dict["spectral_artifacts"] = spectral_artifacts
     
     # Decisions for report
     decisions_dict = {
@@ -1567,7 +1587,8 @@ def _analyze_audio(
                 "notes": gd.notes
             }
             for gd in decision.global_decisions
-        ]
+        ],
+        "flags": spectral_flags
     }
     
     # Confidence assessment

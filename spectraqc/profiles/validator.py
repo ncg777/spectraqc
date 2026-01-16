@@ -93,6 +93,30 @@ def validate_reference_profile_dict(j: dict) -> None:
         w = obj.get("warn")
         if not _is_number(p) or not _is_number(w) or w < p:
             err(f"threshold_model.rules.{name} pass/warn must be numbers with warn>=pass.")
+    spectral_artifacts = rules.get("spectral_artifacts", {})
+    if spectral_artifacts:
+        cutoff = spectral_artifacts.get("cutoff", {})
+        mirror = spectral_artifacts.get("mirror", {})
+        for key in ("min_hz", "drop_db", "warn_fraction", "fail_fraction"):
+            if key in cutoff and not _is_number(cutoff.get(key)):
+                err(f"threshold_model.rules.spectral_artifacts.cutoff.{key} must be a number.")
+        for key in ("window_bins", "hold_bins"):
+            if key in cutoff and (not isinstance(cutoff.get(key), int) or cutoff.get(key) <= 0):
+                err(f"threshold_model.rules.spectral_artifacts.cutoff.{key} must be a positive int.")
+        warn_frac = cutoff.get("warn_fraction")
+        fail_frac = cutoff.get("fail_fraction")
+        if _is_number(warn_frac) and _is_number(fail_frac) and warn_frac < fail_frac:
+            err("threshold_model.rules.spectral_artifacts.cutoff warn_fraction must be >= fail_fraction.")
+        for key in ("min_bins",):
+            if key in mirror and (not isinstance(mirror.get(key), int) or mirror.get(key) <= 0):
+                err(f"threshold_model.rules.spectral_artifacts.mirror.{key} must be a positive int.")
+        for key in ("warn_similarity", "fail_similarity", "min_flatness"):
+            if key in mirror and mirror.get(key) is not None and not _is_number(mirror.get(key)):
+                err(f"threshold_model.rules.spectral_artifacts.mirror.{key} must be a number or null.")
+        warn_sim = mirror.get("warn_similarity")
+        fail_sim = mirror.get("fail_similarity")
+        if _is_number(warn_sim) and _is_number(fail_sim) and fail_sim < warn_sim:
+            err("threshold_model.rules.spectral_artifacts.mirror fail_similarity must be >= warn_similarity.")
     by_band = rules.get("band_mean", {}).get("by_band", [])
     if isinstance(by_band, list):
         valid_names = {b.get("name") for b in bands if isinstance(b, dict)}
