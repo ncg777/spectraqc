@@ -91,6 +91,13 @@ def load_reference_profile(path: str) -> ReferenceProfile:
             float(rms_rules["warn"]),
         )
 
+    noise_floor_rules = tm.get("noise_floor_dbfs")
+    if noise_floor_rules:
+        thresholds["noise_floor_dbfs"] = (
+            float(noise_floor_rules["pass"]),
+            float(noise_floor_rules["warn"]),
+        )
+
     crest_rules = tm.get("crest_factor_db")
     if crest_rules:
         thresholds["crest_factor_db"] = (

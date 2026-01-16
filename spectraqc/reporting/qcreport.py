@@ -23,6 +23,7 @@ def build_qcreport_dict(
     delta_mean_db: np.ndarray,
     band_metrics: list[dict],
     global_metrics: dict,
+    noise_floor: dict | None = None,
     decisions: dict,
     confidence: dict,
     repair: dict | None = None,
@@ -90,6 +91,9 @@ def build_qcreport_dict(
     if repair is not None:
         report["repair"] = repair
 
+    if noise_floor is not None:
+        report["metrics"]["noise_floor"] = noise_floor
+
     cohort_meta = {
         "cohort_id": cohort_id,
         "department": department,
@@ -149,6 +153,8 @@ def build_qcreport_dict(
         gm["lra_lu"] = q(float(gm["lra_lu"]), 0.01)
     if "tonal_peak_max_delta_db" in gm:
         gm["tonal_peak_max_delta_db"] = q(float(gm["tonal_peak_max_delta_db"]), 0.01)
+    if "noise_floor_dbfs" in gm:
+        gm["noise_floor_dbfs"] = q(float(gm["noise_floor_dbfs"]), 0.01)
     if "tonal_peaks" in gm:
         for peak in gm["tonal_peaks"]:
             if "frequency_hz" in peak:
@@ -170,6 +176,13 @@ def build_qcreport_dict(
                 section["noise_floor_dbfs"] = q(float(section["noise_floor_dbfs"]), 0.01)
             if "deviation_curve_db" in section:
                 section["deviation_curve_db"] = q_list(section["deviation_curve_db"], 0.01)
+
+    noise_floor = report["metrics"].get("noise_floor")
+    if noise_floor:
+        if "merged_dbfs" in noise_floor and noise_floor["merged_dbfs"] is not None:
+            noise_floor["merged_dbfs"] = q(float(noise_floor["merged_dbfs"]), 0.01)
+        if "by_channel_dbfs" in noise_floor and noise_floor["by_channel_dbfs"] is not None:
+            noise_floor["by_channel_dbfs"] = q_list(noise_floor["by_channel_dbfs"], 0.01)
 
     # Compute integrity hash (excluding integrity object itself)
     tmp = dict(report)
