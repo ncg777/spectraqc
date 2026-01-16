@@ -17,6 +17,7 @@ from spectraqc.corpus.manifest import load_corpus_manifest, validate_manifest_en
 from spectraqc.io.audio import load_audio_mono
 from spectraqc.metrics.smoothing import smooth_octave_fraction
 from spectraqc.metrics.tonal import derive_noise_floor_baselines
+from spectraqc.thresholds.level_metrics import DEFAULT_LEVEL_METRIC_THRESHOLDS
 from spectraqc.utils.hashing import sha256_hex_canonical_json
 
 SUPPORTED_AUDIO_EXTS = {".wav", ".flac", ".aiff", ".aif", ".mp3"}
@@ -177,10 +178,12 @@ def build_reference_profile(
                     "by_band": [],
                 },
                 "tilt": {"pass": 0.5, "warn": 1.0},
-                "peak_dbfs": {"pass": -1.0, "warn": -0.3},
-                "rms_dbfs": {"pass": -20.0, "warn": -14.0},
+                "peak_dbfs": DEFAULT_LEVEL_METRIC_THRESHOLDS["peak_dbfs"],
+                "true_peak_dbtp": DEFAULT_LEVEL_METRIC_THRESHOLDS["true_peak_dbtp"],
+                "rms_dbfs": DEFAULT_LEVEL_METRIC_THRESHOLDS["rms_dbfs"],
                 "noise_floor_dbfs": {"pass": -60.0, "warn": -54.0},
                 "crest_factor_db": {"pass": 12.0, "warn": 8.0},
+                "lufs_i": DEFAULT_LEVEL_METRIC_THRESHOLDS["lufs_i"],
                 "loudness_range": {"pass": 12.0, "warn": 18.0},
                 "dynamic_range_db": {"pass": 8.0, "warn": 6.0},
                 "dynamic_range_lu": {"pass": 8.0, "warn": 6.0},
