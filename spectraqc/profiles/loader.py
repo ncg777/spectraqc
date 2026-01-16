@@ -46,6 +46,15 @@ def load_reference_profile(path: str) -> ReferenceProfile:
     })
 
     tm = j["threshold_model"]["rules"]
+    corr_rules = tm.get("stereo_correlation", {})
+
+    def _range_cfg(cfg: dict, *, default_min: float, default_max: float) -> dict:
+        return {
+            "pass_min": float(cfg.get("pass_min", default_min)),
+            "pass_max": float(cfg.get("pass_max", default_max)),
+            "warn_min": float(cfg.get("warn_min", default_min)),
+            "warn_max": float(cfg.get("warn_max", default_max)),
+        }
 
     # Band mean thresholds
     band_mean_default = (
@@ -196,6 +205,14 @@ def load_reference_profile(path: str) -> ReferenceProfile:
                 float(tp_default["pass"]),
                 float(tp_default["warn"]),
             )
+
+    if corr_rules:
+        thresholds["stereo_correlation"] = {
+            "frame_seconds": float(corr_rules.get("frame_seconds", 0.5)),
+            "hop_seconds": float(corr_rules.get("hop_seconds", 0.25)),
+            "mean": _range_cfg(corr_rules.get("mean", {}), default_min=0.0, default_max=1.0),
+            "min": _range_cfg(corr_rules.get("min", {}), default_min=-1.0, default_max=1.0),
+        }
 
     noise_floor_defaults = derive_noise_floor_baselines(freqs, ref_mean, bands)
     noise_floor_baselines = {

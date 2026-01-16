@@ -46,6 +46,7 @@ from spectraqc.metrics.dr import (
     dynamic_range_short_term_lufs_mono,
 )
 from spectraqc.metrics.loudness import loudness_metrics_mono
+from spectraqc.metrics.correlation import correlation_summary
 from spectraqc.dsp.repair import apply_repair_plan, compute_repair_metrics
 from spectraqc.algorithms.registry import (
     build_algorithm_registry,
@@ -1327,7 +1328,7 @@ def _analyze_audio(
     
     # Load audio
     audio = load_audio(audio_path)
-    
+
     # Analysis parameters (from profile or defaults)
     analysis_lock = profile.analysis_lock or {}
     nfft = int(analysis_lock.get("fft_size", 4096))
@@ -1342,6 +1343,19 @@ def _analyze_audio(
     ref_var = profile.thresholds.get("_ref_var_db2", np.ones_like(profile.freqs_hz))
     ref_tilt = spectral_tilt_db_per_oct(profile.freqs_hz, profile.ref_mean_db)
     channel_policy = str(analysis_lock.get("channel_policy", "mono")).strip().lower()
+    corr_cfg = profile.thresholds.get("stereo_correlation", {})
+    corr_stats = None
+    corr_frame_seconds = None
+    corr_hop_seconds = None
+    if corr_cfg and audio.channels == 2:
+        corr_frame_seconds = float(corr_cfg.get("frame_seconds", 0.5))
+        corr_hop_seconds = float(corr_cfg.get("hop_seconds", 0.25))
+        corr_stats = correlation_summary(
+            audio.samples,
+            audio.fs,
+            frame_seconds=corr_frame_seconds,
+            hop_seconds=corr_hop_seconds,
+        )
     silence_defaults = profile.thresholds.get("silence_detection", {})
     silence_override = analysis_lock.get("silence_detection", {})
     silence_gap_defaults = silence_defaults.get("gaps", {})
@@ -1617,6 +1631,8 @@ def _analyze_audio(
             dynamic_range_lu=dr_lu,
             clipped_samples=clipping_metrics.get("clipped_samples"),
             clipped_runs=clipping_metrics.get("run_count"),
+            stereo_correlation_mean=None if corr_stats is None else corr_stats.get("mean"),
+            stereo_correlation_min=None if corr_stats is None else corr_stats.get("min"),
         )
 
         spectral_artifacts = detect_spectral_artifacts(
@@ -1811,6 +1827,14 @@ def _analyze_audio(
         global_metrics_dict["clipping"] = clipping_metrics
     if peak_anomalies:
         global_metrics_dict["peak_anomalies"] = peak_anomalies
+    if corr_stats and corr_stats.get("mean") is not None and corr_stats.get("min") is not None:
+        global_metrics_dict["stereo_correlation"] = {
+            "frame_seconds": corr_frame_seconds,
+            "hop_seconds": corr_hop_seconds,
+            "mean": corr_stats.get("mean"),
+            "min": corr_stats.get("min"),
+            "count": corr_stats.get("count"),
+        }
     
     # Decisions for report
     decisions_dict = {
