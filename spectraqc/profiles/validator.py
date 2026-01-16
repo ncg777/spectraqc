@@ -98,6 +98,8 @@ def validate_reference_profile_dict(j: dict) -> None:
     loudness_range = rules.get("loudness_range", {})
     dynamic_range_db = rules.get("dynamic_range_db", {})
     dynamic_range_lu = rules.get("dynamic_range_lu", {})
+    clipped_samples = rules.get("clipped_samples", {})
+    clipped_runs = rules.get("clipped_runs", {})
     for name, obj in (("band_mean", band_mean), ("band_max", band_max), ("tilt", tilt)):
         p = obj.get("pass")
         w = obj.get("warn")
@@ -115,6 +117,8 @@ def validate_reference_profile_dict(j: dict) -> None:
         ("noise_floor_dbfs", noise_floor_dbfs),
         ("lufs_i", lufs_i),
         ("loudness_range", loudness_range),
+        ("clipped_samples", clipped_samples),
+        ("clipped_runs", clipped_runs),
     ):
         if not obj:
             continue

@@ -252,6 +252,18 @@ def build_qcreport_dict(
             if "time_indices_s" in channel:
                 channel["time_indices_s"] = q_list(channel["time_indices_s"], 0.001)
 
+    if "clipping" in gm:
+        clipping = gm["clipping"]
+        if "max_amplitude" in clipping:
+            clipping["max_amplitude"] = q(float(clipping["max_amplitude"]), 0.000001)
+        if "clipped_ratio" in clipping:
+            clipping["clipped_ratio"] = q(float(clipping["clipped_ratio"]), 0.000001)
+        for channel in clipping.get("channels", []):
+            if "max_amplitude" in channel:
+                channel["max_amplitude"] = q(float(channel["max_amplitude"]), 0.000001)
+            if "clipped_ratio" in channel:
+                channel["clipped_ratio"] = q(float(channel["clipped_ratio"]), 0.000001)
+
     if report.get("repair"):
         repair_metrics = report["repair"].get("metrics", {})
         for key in ("before", "after", "delta"):

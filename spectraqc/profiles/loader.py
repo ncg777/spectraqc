@@ -153,6 +153,24 @@ def load_reference_profile(path: str) -> ReferenceProfile:
             float(tonal_rules["warn"]),
         )
 
+    clipped_samples_rules = tm.get("clipped_samples") or DEFAULT_LEVEL_METRIC_THRESHOLDS.get(
+        "clipped_samples"
+    )
+    if clipped_samples_rules:
+        thresholds["clipped_samples"] = (
+            float(clipped_samples_rules["pass"]),
+            float(clipped_samples_rules["warn"]),
+        )
+
+    clipped_runs_rules = tm.get("clipped_runs") or DEFAULT_LEVEL_METRIC_THRESHOLDS.get(
+        "clipped_runs"
+    )
+    if clipped_runs_rules:
+        thresholds["clipped_runs"] = (
+            float(clipped_runs_rules["pass"]),
+            float(clipped_runs_rules["warn"]),
+        )
+
     tp_rules = tm.get("true_peak_dbtp")
     if tp_rules:
         thresholds["true_peak_dbtp"] = (

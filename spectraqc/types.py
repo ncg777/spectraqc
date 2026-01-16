@@ -62,6 +62,8 @@ class GlobalMetrics:
     noise_floor_dbfs: float | None = None
     dynamic_range_db: float | None = None
     dynamic_range_lu: float | None = None
+    clipped_samples: int | None = None
+    clipped_runs: int | None = None
 
 
 @dataclass(frozen=True)
