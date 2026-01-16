@@ -9,6 +9,7 @@ from spectraqc.thresholds.peak_anomalies import build_peak_anomaly_config
 from spectraqc.thresholds.transient_spikes import build_transient_spike_config
 from spectraqc.thresholds.broadband_transients import build_broadband_transient_config
 from spectraqc.thresholds.inter_channel_delay import build_inter_channel_delay_config
+from spectraqc.thresholds.channel_consistency import build_channel_consistency_config
 from spectraqc.profiles.validator import validate_reference_profile_dict
 from spectraqc.metrics.tonal import derive_noise_floor_baselines
 from spectraqc.thresholds.silence_detection import build_silence_detection_config
@@ -49,6 +50,7 @@ def load_reference_profile(path: str) -> ReferenceProfile:
     tm = j["threshold_model"]["rules"]
     corr_rules = tm.get("stereo_correlation", {})
     delay_rules = tm.get("inter_channel_delay")
+    consistency_rules = tm.get("channel_consistency")
 
     def _range_cfg(cfg: dict, *, default_min: float, default_max: float) -> dict:
         return {
@@ -243,6 +245,8 @@ def load_reference_profile(path: str) -> ReferenceProfile:
 
     if delay_rules:
         thresholds["inter_channel_delay"] = build_inter_channel_delay_config(delay_rules)
+    if consistency_rules:
+        thresholds["channel_consistency"] = build_channel_consistency_config(consistency_rules)
 
     noise_floor_defaults = derive_noise_floor_baselines(freqs, ref_mean, bands)
     noise_floor_baselines = {

@@ -72,6 +72,10 @@ class GlobalMetrics:
     inter_channel_delay_seconds: float | None = None
     inter_channel_delay_samples: int | None = None
     inter_channel_delay_correlation: float | None = None
+    channel_consistency_declared: str | None = None
+    channel_consistency_corr_mean: float | None = None
+    channel_consistency_corr_min: float | None = None
+    channel_consistency_side_mid_ratio_db: float | None = None
 
 
 @dataclass(frozen=True)

@@ -105,6 +105,7 @@ def validate_reference_profile_dict(j: dict) -> None:
     peak_anomalies = rules.get("peak_anomalies", {})
     stereo_corr = rules.get("stereo_correlation", {})
     inter_channel_delay = rules.get("inter_channel_delay", {})
+    channel_consistency = rules.get("channel_consistency", {})
     for name, obj in (("band_mean", band_mean), ("band_max", band_max), ("tilt", tilt)):
         p = obj.get("pass")
         w = obj.get("warn")
@@ -193,6 +194,57 @@ def validate_reference_profile_dict(j: dict) -> None:
             err("threshold_model.rules.inter_channel_delay pass/warn must be numbers with warn>=pass.")
         if _is_number(p) and p < 0:
             err("threshold_model.rules.inter_channel_delay pass must be >= 0.")
+    if channel_consistency:
+        declared = channel_consistency.get("declared")
+        if declared is not None and str(declared).lower() not in ("mono", "stereo"):
+            err("threshold_model.rules.channel_consistency.declared must be mono or stereo.")
+        for key in ("frame_seconds", "hop_seconds"):
+            if key in channel_consistency and not _is_number(channel_consistency.get(key)):
+                err(f"threshold_model.rules.channel_consistency.{key} must be a number.")
+        mono_cfg = channel_consistency.get("mono", {})
+        corr_min = mono_cfg.get("corr_min", {})
+        if corr_min:
+            p = corr_min.get("pass")
+            w = corr_min.get("warn")
+            if not _is_number(p) or not _is_number(w) or p < w:
+                err("threshold_model.rules.channel_consistency.mono.corr_min pass/warn must be numbers with pass>=warn.")
+        side_max = mono_cfg.get("side_max_db", {})
+        if side_max:
+            p = side_max.get("pass")
+            w = side_max.get("warn")
+            if not _is_number(p) or not _is_number(w) or w < p:
+                err("threshold_model.rules.channel_consistency.mono.side_max_db pass/warn must be numbers with warn>=pass.")
+        stereo_cfg = channel_consistency.get("stereo", {})
+        corr_cfg = stereo_cfg.get("corr", {})
+        if corr_cfg:
+            pass_min = corr_cfg.get("pass_min")
+            pass_max = corr_cfg.get("pass_max")
+            warn_min = corr_cfg.get("warn_min")
+            warn_max = corr_cfg.get("warn_max")
+            if not _is_number(pass_min) or not _is_number(pass_max):
+                err("threshold_model.rules.channel_consistency.stereo.corr pass_min/pass_max must be numbers.")
+            elif pass_max < pass_min:
+                err("threshold_model.rules.channel_consistency.stereo.corr pass_max must be >= pass_min.")
+            if not _is_number(warn_min) or not _is_number(warn_max):
+                err("threshold_model.rules.channel_consistency.stereo.corr warn_min/warn_max must be numbers.")
+            elif warn_max < warn_min:
+                err("threshold_model.rules.channel_consistency.stereo.corr warn_max must be >= warn_min.")
+            if (
+                _is_number(pass_min)
+                and _is_number(pass_max)
+                and _is_number(warn_min)
+                and _is_number(warn_max)
+                and (warn_min > pass_min or warn_max < pass_max)
+            ):
+                err(
+                    "threshold_model.rules.channel_consistency.stereo.corr warn range must include pass range."
+                )
+        side_min = stereo_cfg.get("side_min_db", {})
+        if side_min:
+            p = side_min.get("pass")
+            w = side_min.get("warn")
+            if not _is_number(p) or not _is_number(w) or p < w:
+                err("threshold_model.rules.channel_consistency.stereo.side_min_db pass/warn must be numbers with pass>=warn.")
     spectral_artifacts = rules.get("spectral_artifacts", {})
     if spectral_artifacts:
         cutoff = spectral_artifacts.get("cutoff", {})

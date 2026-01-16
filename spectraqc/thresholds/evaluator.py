@@ -694,6 +694,104 @@ def evaluate(
         if delay_stat == Status.FAIL:
             any_fail = True
 
+    if (
+        "channel_consistency" in thresholds
+        and (
+            global_metrics.channel_consistency_corr_mean is not None
+            or global_metrics.channel_consistency_side_mid_ratio_db is not None
+        )
+    ):
+        consistency_cfg = thresholds["channel_consistency"]
+        declared = str(consistency_cfg.get("declared", "stereo")).lower()
+        corr_mean = global_metrics.channel_consistency_corr_mean
+        side_ratio = global_metrics.channel_consistency_side_mid_ratio_db
+        status = None
+        value = None
+        units = ""
+        pass_limit = 0.0
+        warn_limit = 0.0
+        notes = ""
+        if declared == "mono":
+            corr_cfg = consistency_cfg["mono"]["corr_min"]
+            side_cfg = consistency_cfg["mono"]["side_max_db"]
+            corr_stat = (
+                _status_low_is_bad(float(corr_mean), corr_cfg["pass"], corr_cfg["warn"])
+                if corr_mean is not None
+                else None
+            )
+            side_stat = (
+                _status_high_is_bad(
+                    float(side_ratio), side_cfg["pass"], side_cfg["warn"]
+                )
+                if side_ratio is not None
+                else None
+            )
+            if corr_stat is None or side_stat is None:
+                status = Status.WARN
+            elif corr_stat == Status.FAIL or side_stat == Status.FAIL:
+                status = Status.FAIL
+            elif corr_stat == Status.WARN or side_stat == Status.WARN:
+                status = Status.WARN
+            else:
+                status = Status.PASS
+            value = float(corr_mean) if corr_mean is not None else float(side_ratio or 0.0)
+            units = "corr"
+            pass_limit = float(corr_cfg["pass"])
+            warn_limit = float(corr_cfg["warn"])
+            notes = (
+                f"mono corr>= {corr_cfg['pass']:.3f}, "
+                f"side<= {side_cfg['pass']:.1f} dB"
+            )
+        else:
+            corr_cfg = consistency_cfg["stereo"]["corr"]
+            side_cfg = consistency_cfg["stereo"]["side_min_db"]
+            corr_stat = (
+                _status_range(
+                    float(corr_mean),
+                    corr_cfg["pass_min"],
+                    corr_cfg["pass_max"],
+                    corr_cfg["warn_min"],
+                    corr_cfg["warn_max"],
+                )
+                if corr_mean is not None
+                else None
+            )
+            side_stat = (
+                _status_low_is_bad(float(side_ratio), side_cfg["pass"], side_cfg["warn"])
+                if side_ratio is not None
+                else None
+            )
+            if corr_stat is None and side_stat is None:
+                status = Status.WARN
+            elif corr_stat == Status.PASS or side_stat == Status.PASS:
+                status = Status.PASS
+            elif corr_stat == Status.WARN or side_stat == Status.WARN:
+                status = Status.WARN
+            else:
+                status = Status.FAIL
+            value = float(side_ratio) if side_ratio is not None else float(corr_mean or 0.0)
+            units = "dB"
+            pass_limit = float(side_cfg["pass"])
+            warn_limit = float(side_cfg["warn"])
+            notes = (
+                f"stereo side>= {side_cfg['pass']:.1f} dB "
+                f"or corr {corr_cfg['pass_min']:.2f}..{corr_cfg['pass_max']:.2f}"
+            )
+
+        global_decisions.append(
+            ThresholdResult(
+                metric="channel_consistency",
+                value=value,
+                units=units,
+                status=status,
+                pass_limit=pass_limit,
+                warn_limit=warn_limit,
+                notes=notes,
+            )
+        )
+        if status == Status.FAIL:
+            any_fail = True
+
     # Tonal peak evaluation if configured
     if (
         global_metrics.tonal_peak_max_delta_db is not None
