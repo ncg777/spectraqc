@@ -6,6 +6,8 @@ DEFAULT_LEVEL_METRIC_THRESHOLDS = {
     "true_peak_dbtp": {"pass": -1.0, "warn": -0.5},
     "rms_dbfs": {"pass": -20.0, "warn": -14.0},
     "lufs_i": {"pass": -16.0, "warn": -14.0},
+    "rms_balance_db": {"pass": 1.0, "warn": 2.0},
+    "lufs_balance_lu": {"pass": 1.0, "warn": 2.0},
     "clipped_samples": {"pass": 0.0, "warn": 10.0},
     "clipped_runs": {"pass": 0.0, "warn": 1.0},
 }
