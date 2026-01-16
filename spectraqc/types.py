@@ -53,6 +53,9 @@ class GlobalMetrics:
     spectral_tilt_db_per_oct: float
     tilt_deviation_db_per_oct: float
     true_peak_dbtp: float | None = None
+    peak_dbfs: float | None = None
+    rms_dbfs: float | None = None
+    crest_factor_db: float | None = None
     lufs_i: float | None = None
     tonal_peak_max_delta_db: float | None = None
 

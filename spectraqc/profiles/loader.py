@@ -77,6 +77,27 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         ),
     }
 
+    peak_rules = tm.get("peak_dbfs")
+    if peak_rules:
+        thresholds["peak_dbfs"] = (
+            float(peak_rules["pass"]),
+            float(peak_rules["warn"]),
+        )
+
+    rms_rules = tm.get("rms_dbfs")
+    if rms_rules:
+        thresholds["rms_dbfs"] = (
+            float(rms_rules["pass"]),
+            float(rms_rules["warn"]),
+        )
+
+    crest_rules = tm.get("crest_factor_db")
+    if crest_rules:
+        thresholds["crest_factor_db"] = (
+            float(crest_rules["pass"]),
+            float(crest_rules["warn"]),
+        )
+
     tonal_rules = tm.get("tonal_peak")
     if tonal_rules:
         thresholds["tonal_peak_delta_db"] = (

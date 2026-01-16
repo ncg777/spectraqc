@@ -165,6 +165,9 @@ def build_reference_profile(
                     "by_band": [],
                 },
                 "tilt": {"pass": 0.5, "warn": 1.0},
+                "peak_dbfs": {"pass": -1.0, "warn": -0.3},
+                "rms_dbfs": {"pass": -20.0, "warn": -14.0},
+                "crest_factor_db": {"pass": 12.0, "warn": 8.0},
                 "tonal_peak": {"pass": 6.0, "warn": 10.0},
             },
             "aggregation": {
