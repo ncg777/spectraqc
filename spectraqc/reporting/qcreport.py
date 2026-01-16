@@ -284,6 +284,22 @@ def build_qcreport_dict(
             if "time_indices_s" in channel:
                 channel["time_indices_s"] = q_list(channel["time_indices_s"], 0.001)
 
+    if "broadband_transients" in gm:
+        transients = gm["broadband_transients"]
+        if "total_duration_s" in transients:
+            transients["total_duration_s"] = q(float(transients["total_duration_s"]), 0.001)
+        if "longest_duration_s" in transients:
+            transients["longest_duration_s"] = q(float(transients["longest_duration_s"]), 0.001)
+        for seg in transients.get("segments", []):
+            if "start_s" in seg:
+                seg["start_s"] = q(float(seg["start_s"]), 0.001)
+            if "end_s" in seg:
+                seg["end_s"] = q(float(seg["end_s"]), 0.001)
+            if "duration_s" in seg:
+                seg["duration_s"] = q(float(seg["duration_s"]), 0.001)
+            if "peak_time_s" in seg:
+                seg["peak_time_s"] = q(float(seg["peak_time_s"]), 0.001)
+
     if "clipping" in gm:
         clipping = gm["clipping"]
         if "max_amplitude" in clipping:

@@ -217,6 +217,41 @@ def validate_reference_profile_dict(j: dict) -> None:
             err("threshold_model.rules.transient_spikes.derivative_threshold must be > 0.")
         if _is_number(transient_spikes.get("min_separation_seconds")) and transient_spikes.get("min_separation_seconds") < 0:
             err("threshold_model.rules.transient_spikes.min_separation_seconds must be >= 0.")
+    broadband_transients = rules.get("broadband_transients", {})
+    if broadband_transients:
+        method = broadband_transients.get("method", "spectral_flux")
+        if method not in ("spectral_flux", "rms"):
+            err("threshold_model.rules.broadband_transients.method must be spectral_flux or rms.")
+        channel_policy = broadband_transients.get("channel_policy", "average")
+        if channel_policy not in ("average",):
+            err("threshold_model.rules.broadband_transients.channel_policy must be average.")
+        for key in (
+            "frame_seconds",
+            "hop_seconds",
+            "min_duration_seconds",
+            "merge_gap_seconds",
+            "flux_delta",
+            "flux_threshold",
+            "rms_delta_db",
+            "rms_threshold_dbfs",
+        ):
+            if key in broadband_transients and not _is_number(broadband_transients.get(key)):
+                err(f"threshold_model.rules.broadband_transients.{key} must be a number.")
+        gates = broadband_transients.get("gates", {})
+        for key in ("warn_total_seconds", "fail_total_seconds"):
+            if key in gates and not _is_number(gates.get(key)):
+                err(f"threshold_model.rules.broadband_transients.gates.{key} must be a number.")
+        for key in ("warn_count", "fail_count"):
+            if key in gates and (not isinstance(gates.get(key), int) or gates.get(key) < 0):
+                err(f"threshold_model.rules.broadband_transients.gates.{key} must be a non-negative int.")
+        warn_count = gates.get("warn_count")
+        fail_count = gates.get("fail_count")
+        if isinstance(warn_count, int) and isinstance(fail_count, int) and fail_count < warn_count:
+            err("threshold_model.rules.broadband_transients.gates.fail_count must be >= warn_count.")
+        warn_seconds = gates.get("warn_total_seconds")
+        fail_seconds = gates.get("fail_total_seconds")
+        if _is_number(warn_seconds) and _is_number(fail_seconds) and fail_seconds < warn_seconds:
+            err("threshold_model.rules.broadband_transients.gates.fail_total_seconds must be >= warn_total_seconds.")
     if peak_anomalies:
         channel_policy = peak_anomalies.get("channel_policy", "per_channel")
         if channel_policy not in ("per_channel", "average"):
@@ -373,6 +408,26 @@ def validate_reference_profile_dict(j: dict) -> None:
             err("analysis_lock.transient_spikes.derivative_threshold must be > 0.")
         if _is_number(transient_lock.get("min_separation_seconds")) and transient_lock.get("min_separation_seconds") < 0:
             err("analysis_lock.transient_spikes.min_separation_seconds must be >= 0.")
+    broadband_lock = analysis_lock.get("broadband_transients", {})
+    if broadband_lock:
+        method = broadband_lock.get("method", "spectral_flux")
+        if method not in ("spectral_flux", "rms"):
+            err("analysis_lock.broadband_transients.method must be spectral_flux or rms.")
+        channel_policy = broadband_lock.get("channel_policy", "average")
+        if channel_policy not in ("average",):
+            err("analysis_lock.broadband_transients.channel_policy must be average.")
+        for key in (
+            "frame_seconds",
+            "hop_seconds",
+            "min_duration_seconds",
+            "merge_gap_seconds",
+            "flux_delta",
+            "flux_threshold",
+            "rms_delta_db",
+            "rms_threshold_dbfs",
+        ):
+            if key in broadband_lock and not _is_number(broadband_lock.get(key)):
+                err(f"analysis_lock.broadband_transients.{key} must be a number.")
 
     if errors:
         raise ValueError("; ".join(errors))
