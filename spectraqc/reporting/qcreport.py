@@ -234,6 +234,8 @@ def build_qcreport_dict(
                 gaps["total_duration_s"] = q(float(gaps["total_duration_s"]), 0.001)
             if "longest_gap_s" in gaps:
                 gaps["longest_gap_s"] = q(float(gaps["longest_gap_s"]), 0.001)
+            if "max_allowed_gap_s" in gaps:
+                gaps["max_allowed_gap_s"] = q(float(gaps["max_allowed_gap_s"]), 0.001)
             for seg in gaps.get("segments", []):
                 if "start_s" in seg:
                     seg["start_s"] = q(float(seg["start_s"]), 0.001)
