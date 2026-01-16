@@ -16,6 +16,11 @@ This repository implements a V1 CLI with a V2 reference profile schema. The V1 C
 
 The documentation below is authoritative for the behavior of the current codebase. When a document conflicts with code, code is normative.
 
+## Community
+
+- Contribution guide: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- Code of Conduct: see [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
 ## Formal specification
 
 ### Terminology
