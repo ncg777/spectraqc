@@ -30,6 +30,7 @@ from spectraqc.metrics.brickwall import detect_spectral_artifacts
 from spectraqc.metrics.tonal import detect_tonal_peaks
 from spectraqc.metrics.truepeak import true_peak_dbtp_mono
 from spectraqc.metrics.noise import noise_floor_dbfs_mono
+from spectraqc.metrics.clipping import detect_clipping_runs
 from spectraqc.metrics.level_anomalies import detect_level_anomalies
 from spectraqc.metrics.transient_spikes import detect_transient_spikes
 from spectraqc.metrics.levels import (
@@ -1527,6 +1528,7 @@ def _analyze_audio(
             analysis_buffer.samples,
             analysis_buffer.fs,
         )
+        clipping_metrics = detect_clipping_runs(analysis_buffer.samples)
 
         try:
             lufs_i, lra_lu = loudness_metrics_mono(
@@ -1580,6 +1582,8 @@ def _analyze_audio(
             noise_floor_dbfs=noise_floor_dbfs,
             dynamic_range_db=dr_db,
             dynamic_range_lu=dr_lu,
+            clipped_samples=clipping_metrics.get("clipped_samples"),
+            clipped_runs=clipping_metrics.get("run_count"),
         )
 
         spectral_artifacts = detect_spectral_artifacts(
@@ -1611,7 +1615,8 @@ def _analyze_audio(
             "tonal_peaks": tonal_peaks,
             "decision": decision,
             "spectral_artifacts": spectral_artifacts,
-            "spectral_flags": spectral_flags
+            "spectral_flags": spectral_flags,
+            "clipping_metrics": clipping_metrics,
         }
 
     results = [_analyze_single(buf) for buf in analysis_buffers]
@@ -1636,6 +1641,7 @@ def _analyze_audio(
     decision = chosen["decision"]
     spectral_artifacts = chosen.get("spectral_artifacts", {})
     spectral_flags = chosen.get("spectral_flags", [])
+    clipping_metrics = chosen.get("clipping_metrics", {})
     tp_dbtp = global_metrics.true_peak_dbtp
     lufs_i = global_metrics.lufs_i
     lra_lu = global_metrics.lra_lu
@@ -1765,6 +1771,8 @@ def _analyze_audio(
         global_metrics_dict["silence"] = silence_metrics
     if transient_spikes:
         global_metrics_dict["transient_spikes"] = transient_spikes
+    if clipping_metrics:
+        global_metrics_dict["clipping"] = clipping_metrics
     
     # Decisions for report
     decisions_dict = {

@@ -422,6 +422,60 @@ def evaluate(
         if dr_stat == Status.FAIL:
             any_fail = True
 
+    if global_metrics.clipped_samples is not None and "clipped_samples" in thresholds:
+        clip_pass, clip_warn = thresholds["clipped_samples"]
+        clip_stat = _status_high_is_bad(
+            float(global_metrics.clipped_samples), clip_pass, clip_warn
+        )
+        global_decisions.append(
+            ThresholdResult(
+                metric="clipped_samples",
+                value=float(global_metrics.clipped_samples),
+                units="samples",
+                status=clip_stat,
+                pass_limit=clip_pass,
+                warn_limit=clip_warn,
+                notes=_explain(
+                    metric="clipped_samples",
+                    value=float(global_metrics.clipped_samples),
+                    units="samples",
+                    status=clip_stat,
+                    pass_lim=clip_pass,
+                    warn_lim=clip_warn,
+                    compare="above"
+                )
+            )
+        )
+        if clip_stat == Status.FAIL:
+            any_fail = True
+
+    if global_metrics.clipped_runs is not None and "clipped_runs" in thresholds:
+        run_pass, run_warn = thresholds["clipped_runs"]
+        run_stat = _status_high_is_bad(
+            float(global_metrics.clipped_runs), run_pass, run_warn
+        )
+        global_decisions.append(
+            ThresholdResult(
+                metric="clipped_runs",
+                value=float(global_metrics.clipped_runs),
+                units="runs",
+                status=run_stat,
+                pass_limit=run_pass,
+                warn_limit=run_warn,
+                notes=_explain(
+                    metric="clipped_runs",
+                    value=float(global_metrics.clipped_runs),
+                    units="runs",
+                    status=run_stat,
+                    pass_lim=run_pass,
+                    warn_lim=run_warn,
+                    compare="above"
+                )
+            )
+        )
+        if run_stat == Status.FAIL:
+            any_fail = True
+
     # Tonal peak evaluation if configured
     if (
         global_metrics.tonal_peak_max_delta_db is not None
