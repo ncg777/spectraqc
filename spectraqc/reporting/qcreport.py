@@ -176,6 +176,16 @@ def build_qcreport_dict(
                 peak["noise_floor_db"] = q(float(peak["noise_floor_db"]), 0.01)
             if "delta_db" in peak and peak["delta_db"] is not None:
                 peak["delta_db"] = q(float(peak["delta_db"]), 0.01)
+    if "balance" in gm:
+        balance = gm["balance"]
+        for channel in balance.get("channels", []):
+            if "rms_dbfs" in channel and channel["rms_dbfs"] is not None:
+                channel["rms_dbfs"] = q(float(channel["rms_dbfs"]), 0.01)
+            if "lufs_i" in channel and channel["lufs_i"] is not None:
+                channel["lufs_i"] = q(float(channel["lufs_i"]), 0.01)
+        for key in ("rms_delta_db", "rms_delta_abs_db", "lufs_delta_lu", "lufs_delta_abs_lu"):
+            if key in balance and balance[key] is not None:
+                balance[key] = q(float(balance[key]), 0.01)
     if "level_anomalies" in gm:
         def _quantize_segment_block(block: dict | None) -> None:
             if not block:

@@ -92,9 +92,11 @@ def validate_reference_profile_dict(j: dict) -> None:
     peak_dbfs = rules.get("peak_dbfs", {})
     true_peak_dbtp = rules.get("true_peak_dbtp", {})
     rms_dbfs = rules.get("rms_dbfs", {})
+    rms_balance_db = rules.get("rms_balance_db", {})
     noise_floor_dbfs = rules.get("noise_floor_dbfs", {})
     crest_factor_db = rules.get("crest_factor_db", {})
     lufs_i = rules.get("lufs_i", {})
+    lufs_balance_lu = rules.get("lufs_balance_lu", {})
     loudness_range = rules.get("loudness_range", {})
     dynamic_range_db = rules.get("dynamic_range_db", {})
     dynamic_range_lu = rules.get("dynamic_range_lu", {})
@@ -117,8 +119,10 @@ def validate_reference_profile_dict(j: dict) -> None:
         ("peak_dbfs", peak_dbfs),
         ("true_peak_dbtp", true_peak_dbtp),
         ("rms_dbfs", rms_dbfs),
+        ("rms_balance_db", rms_balance_db),
         ("noise_floor_dbfs", noise_floor_dbfs),
         ("lufs_i", lufs_i),
+        ("lufs_balance_lu", lufs_balance_lu),
         ("loudness_range", loudness_range),
         ("clipped_samples", clipped_samples),
         ("clipped_runs", clipped_runs),

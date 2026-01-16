@@ -300,6 +300,32 @@ def evaluate(
         if rms_stat == Status.FAIL:
             any_fail = True
 
+    if global_metrics.rms_balance_db is not None and "rms_balance_db" in thresholds:
+        balance_pass, balance_warn = thresholds["rms_balance_db"]
+        balance_value = float(global_metrics.rms_balance_db)
+        balance_stat = _status_abs(abs(balance_value), balance_pass, balance_warn)
+        global_decisions.append(
+            ThresholdResult(
+                metric="rms_balance",
+                value=balance_value,
+                units="dB",
+                status=balance_stat,
+                pass_limit=balance_pass,
+                warn_limit=balance_warn,
+                notes=_explain(
+                    metric="rms_balance",
+                    value=balance_value,
+                    units="dB",
+                    status=balance_stat,
+                    pass_lim=balance_pass,
+                    warn_lim=balance_warn,
+                    compare="outside absolute"
+                )
+            )
+        )
+        if balance_stat == Status.FAIL:
+            any_fail = True
+
     if global_metrics.lufs_i is not None and "lufs_i" in thresholds:
         lufs_pass, lufs_warn = thresholds["lufs_i"]
         lufs_stat = _status_high_is_bad(float(global_metrics.lufs_i), lufs_pass, lufs_warn)
@@ -323,6 +349,32 @@ def evaluate(
             )
         )
         if lufs_stat == Status.FAIL:
+            any_fail = True
+
+    if global_metrics.lufs_balance_lu is not None and "lufs_balance_lu" in thresholds:
+        balance_pass, balance_warn = thresholds["lufs_balance_lu"]
+        balance_value = float(global_metrics.lufs_balance_lu)
+        balance_stat = _status_abs(abs(balance_value), balance_pass, balance_warn)
+        global_decisions.append(
+            ThresholdResult(
+                metric="lufs_balance",
+                value=balance_value,
+                units="LU",
+                status=balance_stat,
+                pass_limit=balance_pass,
+                warn_limit=balance_warn,
+                notes=_explain(
+                    metric="lufs_balance",
+                    value=balance_value,
+                    units="LU",
+                    status=balance_stat,
+                    pass_lim=balance_pass,
+                    warn_lim=balance_warn,
+                    compare="outside absolute"
+                )
+            )
+        )
+        if balance_stat == Status.FAIL:
             any_fail = True
 
     if global_metrics.noise_floor_dbfs is not None and "noise_floor_dbfs" in thresholds:

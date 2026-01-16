@@ -35,6 +35,7 @@ from spectraqc.metrics.level_anomalies import detect_level_anomalies
 from spectraqc.metrics.transient_spikes import detect_transient_spikes
 from spectraqc.metrics.broadband_transients import detect_broadband_transients
 from spectraqc.metrics.peak_anomalies import detect_peak_anomalies
+from spectraqc.metrics.balance import balance_metrics
 from spectraqc.metrics.levels import (
     peak_dbfs_mono,
     rms_dbfs_mono,
@@ -1485,6 +1486,16 @@ def _analyze_audio(
     if missing_ids:
         raise ValueError(f"Missing algorithm registry entries: {missing_ids}")
     analysis_buffers = apply_channel_policy(audio, channel_policy)
+    balance_metrics_block = None
+    rms_balance_db = None
+    lufs_balance_lu = None
+    if audio.channels >= 2 and audio.samples.ndim == 2:
+        try:
+            balance_metrics_block = balance_metrics(audio.samples, audio.fs)
+            rms_balance_db = balance_metrics_block.get("rms_delta_db")
+            lufs_balance_lu = balance_metrics_block.get("lufs_delta_lu")
+        except Exception:
+            balance_metrics_block = None
     level_anomaly_cfg = profile.thresholds.get("level_anomalies", {})
     level_anomalies = detect_level_anomalies(
         audio.samples,
@@ -1633,8 +1644,10 @@ def _analyze_audio(
             true_peak_dbtp=tp_dbtp,
             peak_dbfs=peak_dbfs,
             rms_dbfs=rms_dbfs,
+            rms_balance_db=rms_balance_db,
             crest_factor_db=crest_factor_db,
             lufs_i=lufs_i,
+            lufs_balance_lu=lufs_balance_lu,
             lra_lu=lra_lu,
             tonal_peak_max_delta_db=tonal_peak_max_delta,
             noise_floor_dbfs=noise_floor_dbfs,
@@ -1813,6 +1826,8 @@ def _analyze_audio(
         global_metrics_dict["rms_dbfs"] = global_metrics.rms_dbfs
     if global_metrics.lufs_i is not None:
         global_metrics_dict["lufs_i"] = global_metrics.lufs_i
+    if balance_metrics_block:
+        global_metrics_dict["balance"] = balance_metrics_block
     if global_metrics.noise_floor_dbfs is not None:
         global_metrics_dict["noise_floor_dbfs"] = global_metrics.noise_floor_dbfs
     if global_metrics.crest_factor_db is not None:

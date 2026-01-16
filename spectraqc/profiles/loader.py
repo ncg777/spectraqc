@@ -123,11 +123,29 @@ def load_reference_profile(path: str) -> ReferenceProfile:
             float(rms_rules["warn"]),
         )
 
+    rms_balance_rules = tm.get("rms_balance_db") or DEFAULT_LEVEL_METRIC_THRESHOLDS.get(
+        "rms_balance_db"
+    )
+    if rms_balance_rules:
+        thresholds["rms_balance_db"] = (
+            float(rms_balance_rules["pass"]),
+            float(rms_balance_rules["warn"]),
+        )
+
     lufs_rules = tm.get("lufs_i") or DEFAULT_LEVEL_METRIC_THRESHOLDS.get("lufs_i")
     if lufs_rules:
         thresholds["lufs_i"] = (
             float(lufs_rules["pass"]),
             float(lufs_rules["warn"]),
+        )
+
+    lufs_balance_rules = tm.get("lufs_balance_lu") or DEFAULT_LEVEL_METRIC_THRESHOLDS.get(
+        "lufs_balance_lu"
+    )
+    if lufs_balance_rules:
+        thresholds["lufs_balance_lu"] = (
+            float(lufs_balance_rules["pass"]),
+            float(lufs_balance_rules["warn"]),
         )
 
     noise_floor_rules = tm.get("noise_floor_dbfs")
