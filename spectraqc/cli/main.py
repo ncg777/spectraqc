@@ -30,6 +30,7 @@ from spectraqc.metrics.brickwall import detect_spectral_artifacts
 from spectraqc.metrics.tonal import detect_tonal_peaks
 from spectraqc.metrics.truepeak import true_peak_dbtp_mono
 from spectraqc.metrics.noise import noise_floor_dbfs_mono
+from spectraqc.metrics.level_anomalies import detect_level_anomalies
 from spectraqc.metrics.levels import (
     peak_dbfs_mono,
     rms_dbfs_mono,
@@ -50,6 +51,7 @@ from spectraqc.algorithms.registry import (
 from spectraqc.profiles.loader import load_reference_profile
 from spectraqc.thresholds.evaluator import evaluate
 from spectraqc.thresholds.brickwall import evaluate_spectral_artifacts
+from spectraqc.thresholds.level_anomalies import evaluate_level_anomalies
 from spectraqc.reporting.qcreport import build_qcreport_dict
 from spectraqc.reporting.batch_summary import (
     build_batch_summary,
@@ -1352,6 +1354,16 @@ def _analyze_audio(
     if missing_ids:
         raise ValueError(f"Missing algorithm registry entries: {missing_ids}")
     analysis_buffers = apply_channel_policy(audio, channel_policy)
+    level_anomaly_cfg = profile.thresholds.get("level_anomalies", {})
+    level_anomalies = detect_level_anomalies(
+        audio.samples,
+        audio.fs,
+        config=level_anomaly_cfg
+    )
+    level_flags = evaluate_level_anomalies(
+        level_anomalies,
+        config=level_anomaly_cfg
+    )
 
     def _analyze_single(mono_audio):
         resampled = False
@@ -1627,6 +1639,8 @@ def _analyze_audio(
         global_metrics_dict["tonal_peaks"] = tonal_peaks
     if spectral_artifacts:
         global_metrics_dict["spectral_artifacts"] = spectral_artifacts
+    if level_anomalies:
+        global_metrics_dict["level_anomalies"] = level_anomalies
     
     # Decisions for report
     decisions_dict = {
@@ -1677,7 +1691,7 @@ def _analyze_audio(
             }
             for gd in decision.global_decisions
         ],
-        "flags": spectral_flags
+        "flags": spectral_flags + level_flags
     }
     
     # Confidence assessment

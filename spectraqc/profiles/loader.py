@@ -3,6 +3,7 @@ import json
 import numpy as np
 from spectraqc.types import ReferenceProfile, FrequencyBand
 from spectraqc.thresholds.brickwall import build_spectral_artifact_config
+from spectraqc.thresholds.level_anomalies import build_level_anomaly_config
 from spectraqc.profiles.validator import validate_reference_profile_dict
 from spectraqc.metrics.tonal import derive_noise_floor_baselines
 
@@ -74,6 +75,9 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         "_smoothing": analysis_lock.get("smoothing", {"type": "none"}),
         "spectral_artifacts": build_spectral_artifact_config(
             tm.get("spectral_artifacts")
+        ),
+        "level_anomalies": build_level_anomaly_config(
+            tm.get("level_anomalies")
         ),
     }
 

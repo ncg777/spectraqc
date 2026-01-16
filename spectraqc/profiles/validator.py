@@ -153,6 +153,47 @@ def validate_reference_profile_dict(j: dict) -> None:
         fail_sim = mirror.get("fail_similarity")
         if _is_number(warn_sim) and _is_number(fail_sim) and fail_sim < warn_sim:
             err("threshold_model.rules.spectral_artifacts.mirror fail_similarity must be >= warn_similarity.")
+    level_anomalies = rules.get("level_anomalies", {})
+    if level_anomalies:
+        channel_policy = level_anomalies.get("channel_policy", "per_channel")
+        if channel_policy not in ("per_channel", "average"):
+            err("threshold_model.rules.level_anomalies.channel_policy must be per_channel or average.")
+        drop_cfg = level_anomalies.get("drop", {})
+        zero_cfg = level_anomalies.get("zero", {})
+        for key in ("frame_seconds", "hop_seconds", "baseline_window_seconds", "drop_db", "min_duration_seconds", "floor_dbfs"):
+            if key in drop_cfg and not _is_number(drop_cfg.get(key)):
+                err(f"threshold_model.rules.level_anomalies.drop.{key} must be a number.")
+        for key in ("warn_total_seconds", "fail_total_seconds"):
+            if key in drop_cfg and not _is_number(drop_cfg.get(key)):
+                err(f"threshold_model.rules.level_anomalies.drop.{key} must be a number.")
+        for key in ("warn_count", "fail_count"):
+            if key in drop_cfg and (not isinstance(drop_cfg.get(key), int) or drop_cfg.get(key) < 0):
+                err(f"threshold_model.rules.level_anomalies.drop.{key} must be a non-negative int.")
+        warn_count = drop_cfg.get("warn_count")
+        fail_count = drop_cfg.get("fail_count")
+        if isinstance(warn_count, int) and isinstance(fail_count, int) and fail_count < warn_count:
+            err("threshold_model.rules.level_anomalies.drop.fail_count must be >= warn_count.")
+        warn_seconds = drop_cfg.get("warn_total_seconds")
+        fail_seconds = drop_cfg.get("fail_total_seconds")
+        if _is_number(warn_seconds) and _is_number(fail_seconds) and fail_seconds < warn_seconds:
+            err("threshold_model.rules.level_anomalies.drop.fail_total_seconds must be >= warn_total_seconds.")
+        for key in ("zero_threshold", "min_duration_seconds"):
+            if key in zero_cfg and not _is_number(zero_cfg.get(key)):
+                err(f"threshold_model.rules.level_anomalies.zero.{key} must be a number.")
+        for key in ("warn_total_seconds", "fail_total_seconds"):
+            if key in zero_cfg and not _is_number(zero_cfg.get(key)):
+                err(f"threshold_model.rules.level_anomalies.zero.{key} must be a number.")
+        for key in ("warn_count", "fail_count"):
+            if key in zero_cfg and (not isinstance(zero_cfg.get(key), int) or zero_cfg.get(key) < 0):
+                err(f"threshold_model.rules.level_anomalies.zero.{key} must be a non-negative int.")
+        warn_count = zero_cfg.get("warn_count")
+        fail_count = zero_cfg.get("fail_count")
+        if isinstance(warn_count, int) and isinstance(fail_count, int) and fail_count < warn_count:
+            err("threshold_model.rules.level_anomalies.zero.fail_count must be >= warn_count.")
+        warn_seconds = zero_cfg.get("warn_total_seconds")
+        fail_seconds = zero_cfg.get("fail_total_seconds")
+        if _is_number(warn_seconds) and _is_number(fail_seconds) and fail_seconds < warn_seconds:
+            err("threshold_model.rules.level_anomalies.zero.fail_total_seconds must be >= warn_total_seconds.")
     by_band = rules.get("band_mean", {}).get("by_band", [])
     if isinstance(by_band, list):
         valid_names = {b.get("name") for b in bands if isinstance(b, dict)}
