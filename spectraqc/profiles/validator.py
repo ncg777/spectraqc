@@ -170,6 +170,17 @@ def validate_reference_profile_dict(j: dict) -> None:
                 err(
                     f"threshold_model.rules.stereo_correlation.{name} warn range must include pass range."
                 )
+        inversion = stereo_corr.get("inversion", {})
+        if inversion:
+            threshold = inversion.get("threshold")
+            if not _is_number(threshold):
+                err("threshold_model.rules.stereo_correlation.inversion.threshold must be a number.")
+            p = inversion.get("pass")
+            w = inversion.get("warn")
+            if not _is_number(p) or not _is_number(w) or w < p:
+                err(
+                    "threshold_model.rules.stereo_correlation.inversion pass/warn must be numbers with warn>=pass."
+                )
     if inter_channel_delay:
         max_delay_seconds = inter_channel_delay.get("max_delay_seconds")
         if max_delay_seconds is not None and not _is_number(max_delay_seconds):
@@ -397,6 +408,16 @@ def validate_reference_profile_dict(j: dict) -> None:
             err("analysis_lock.normalization.true_peak.max_dbtp must be number.")
         if not isinstance(tp.get("algorithm_id", ""), str) or not tp.get("algorithm_id"):
             err("analysis_lock.normalization.true_peak.algorithm_id required when enabled.")
+
+    stereo_lock = analysis_lock.get("stereo_correlation", {})
+    if stereo_lock:
+        if not isinstance(stereo_lock.get("algorithm_id", ""), str) or not stereo_lock.get(
+            "algorithm_id", ""
+        ):
+            err("analysis_lock.stereo_correlation.algorithm_id must be a non-empty string.")
+        for key in ("frame_seconds", "hop_seconds", "inversion_threshold"):
+            if key in stereo_lock and not _is_number(stereo_lock.get(key)):
+                err(f"analysis_lock.stereo_correlation.{key} must be a number.")
 
     dr_cfg = analysis_lock.get("dynamic_range", {})
     rms_cfg = dr_cfg.get("rms_percentile", {})

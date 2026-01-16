@@ -632,6 +632,37 @@ def evaluate(
         if min_stat == Status.FAIL:
             any_fail = True
 
+        inversion_cfg = corr_cfg.get("inversion")
+        if (
+            inversion_cfg
+            and global_metrics.sign_inverted_correlation_ratio is not None
+        ):
+            invert_pass = float(inversion_cfg.get("pass", 0.05))
+            invert_warn = float(inversion_cfg.get("warn", 0.2))
+            invert_value = float(global_metrics.sign_inverted_correlation_ratio)
+            invert_stat = _status_high_is_bad(invert_value, invert_pass, invert_warn)
+            global_decisions.append(
+                ThresholdResult(
+                    metric="sign_inverted_correlation_ratio",
+                    value=invert_value,
+                    units="ratio",
+                    status=invert_stat,
+                    pass_limit=invert_pass,
+                    warn_limit=invert_warn,
+                    notes=_explain(
+                        metric="sign_inverted_correlation_ratio",
+                        value=invert_value,
+                        units="ratio",
+                        status=invert_stat,
+                        pass_lim=invert_pass,
+                        warn_lim=invert_warn,
+                        compare="above",
+                    ),
+                )
+            )
+            if invert_stat == Status.FAIL:
+                any_fail = True
+
     if (
         global_metrics.inter_channel_delay_seconds is not None
         and "inter_channel_delay" in thresholds

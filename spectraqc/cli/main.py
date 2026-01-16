@@ -50,6 +50,7 @@ from spectraqc.metrics.loudness import loudness_metrics_mono
 from spectraqc.metrics.correlation import (
     correlation_summary,
     estimate_interchannel_delay,
+    sign_inverted_correlation_summary,
 )
 from spectraqc.dsp.repair import apply_repair_plan, compute_repair_metrics
 from spectraqc.algorithms.registry import (
@@ -1352,6 +1353,7 @@ def _analyze_audio(
     corr_stats = None
     corr_frame_seconds = None
     corr_hop_seconds = None
+    sign_inverted_stats = None
     delay_stats = None
     if corr_cfg and audio.channels == 2:
         corr_frame_seconds = float(corr_cfg.get("frame_seconds", 0.5))
@@ -1361,6 +1363,14 @@ def _analyze_audio(
             audio.fs,
             frame_seconds=corr_frame_seconds,
             hop_seconds=corr_hop_seconds,
+        )
+        inversion_cfg = corr_cfg.get("inversion", {})
+        sign_inverted_stats = sign_inverted_correlation_summary(
+            audio.samples,
+            audio.fs,
+            frame_seconds=corr_frame_seconds,
+            hop_seconds=corr_hop_seconds,
+            inversion_threshold=float(inversion_cfg.get("threshold", -0.8)),
         )
     if delay_cfg and audio.channels == 2:
         delay_stats = estimate_interchannel_delay(
@@ -1657,6 +1667,9 @@ def _analyze_audio(
             clipped_runs=clipping_metrics.get("run_count"),
             stereo_correlation_mean=None if corr_stats is None else corr_stats.get("mean"),
             stereo_correlation_min=None if corr_stats is None else corr_stats.get("min"),
+            sign_inverted_correlation_ratio=(
+                None if sign_inverted_stats is None else sign_inverted_stats.get("ratio")
+            ),
             inter_channel_delay_seconds=None if delay_stats is None else delay_stats.get("delay_seconds"),
             inter_channel_delay_samples=None if delay_stats is None else delay_stats.get("delay_samples"),
             inter_channel_delay_correlation=None if delay_stats is None else delay_stats.get("correlation"),
@@ -1864,6 +1877,16 @@ def _analyze_audio(
             "min": corr_stats.get("min"),
             "count": corr_stats.get("count"),
         }
+        if sign_inverted_stats:
+            global_metrics_dict["stereo_correlation"]["inversion_threshold"] = (
+                sign_inverted_stats.get("threshold")
+            )
+            global_metrics_dict["stereo_correlation"]["inverted_ratio"] = (
+                sign_inverted_stats.get("ratio")
+            )
+            global_metrics_dict["stereo_correlation"]["inverted_count"] = (
+                sign_inverted_stats.get("inverted_count")
+            )
     if delay_stats and delay_stats.get("delay_seconds") is not None:
         global_metrics_dict["inter_channel_delay"] = {
             "delay_seconds": delay_stats.get("delay_seconds"),
@@ -1871,6 +1894,36 @@ def _analyze_audio(
             "correlation": delay_stats.get("correlation"),
             "max_delay_seconds": None if delay_cfg is None else delay_cfg.get("max_delay_seconds"),
         }
+
+    sign_inverted_flags: list[dict] = []
+    sign_inverted_decision = next(
+        (
+            gd
+            for gd in decision.global_decisions
+            if gd.metric == "sign_inverted_correlation_ratio"
+        ),
+        None,
+    )
+    if sign_inverted_decision is not None and sign_inverted_decision.status in {
+        Status.WARN,
+        Status.FAIL,
+    }:
+        sign_inverted_flags.append(
+            {
+                "rule_id": "sign_inverted_correlation_ratio",
+                "status": sign_inverted_decision.status.value,
+                "measurements": {
+                    "ratio": sign_inverted_decision.value,
+                    "pass_limit": sign_inverted_decision.pass_limit,
+                    "warn_limit": sign_inverted_decision.warn_limit,
+                    "inversion_threshold": (
+                        global_metrics_dict.get("stereo_correlation", {}).get(
+                            "inversion_threshold"
+                        )
+                    ),
+                },
+            }
+        )
     
     # Decisions for report
     decisions_dict = {
@@ -1921,7 +1974,14 @@ def _analyze_audio(
             }
             for gd in decision.global_decisions
         ],
-        "flags": spectral_flags + level_flags + gap_flags + peak_flags + broadband_flags
+        "flags": (
+            spectral_flags
+            + level_flags
+            + gap_flags
+            + peak_flags
+            + broadband_flags
+            + sign_inverted_flags
+        )
     }
 
     if "inter_channel_delay" in global_metrics_dict:

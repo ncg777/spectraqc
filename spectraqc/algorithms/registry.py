@@ -4,6 +4,7 @@ from __future__ import annotations
 
 LOUDNESS_ALGO_ID = "bs1770-4-ffmpeg-ebur128-lufs"
 TRUE_PEAK_ALGO_ID = "true_peak_kaiser_sinc_4x_v1"
+STEREO_CORRELATION_ALGO_ID = "stereo_correlation_pearson_windowed_v1"
 
 
 def build_algorithm_registry(
@@ -103,6 +104,23 @@ def build_algorithm_registry(
                 "backend": "internal",
                 "oversample": 4
             }
+        },
+        STEREO_CORRELATION_ALGO_ID: {
+            "id": STEREO_CORRELATION_ALGO_ID,
+            "params": {
+                "method": "pearson_windowed",
+                "frame_seconds": float(
+                    analysis_lock.get("stereo_correlation", {}).get("frame_seconds", 0.5)
+                ),
+                "hop_seconds": float(
+                    analysis_lock.get("stereo_correlation", {}).get("hop_seconds", 0.25)
+                ),
+                "inversion_threshold": float(
+                    analysis_lock.get("stereo_correlation", {}).get(
+                        "inversion_threshold", -0.8
+                    )
+                ),
+            },
         },
         "channel_policy_v1": {
             "id": "channel_policy_v1",
