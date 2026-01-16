@@ -437,7 +437,6 @@ Options:
 
 ## References
 - CLI and QCReport spec: `docs/SpectraQC_V1_Full_Implementation.md`
-- V2 scope: `docs/V2_SCOPE.md`
 - Profile versioning rules: `docs/profile_versioning.md`
 - Reference profile schema: `docs/reference_profile_v2.schema.json`
 - Corpus manifest schema: `docs/corpus_manifest_v1.schema.json`
