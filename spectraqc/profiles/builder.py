@@ -160,6 +160,12 @@ def build_reference_profile(
                     "algorithm_id": TRUE_PEAK_ALGO_ID,
                 },
             },
+            "transient_spikes": {
+                "channel_policy": "per_channel",
+                "highpass_hz": 2000.0,
+                "derivative_threshold": 0.2,
+                "min_separation_seconds": 0.005,
+            },
         },
         "corpus_stats": {
             "file_count": int(len(ref_audio_paths)),
@@ -235,6 +241,12 @@ def build_reference_profile(
                         "fail_total_seconds": 0.5,
                         "max_gap_seconds": 0.0,
                     },
+                },
+                "transient_spikes": {
+                    "channel_policy": "per_channel",
+                    "highpass_hz": 2000.0,
+                    "derivative_threshold": 0.2,
+                    "min_separation_seconds": 0.005,
                 },
             },
             "aggregation": {
