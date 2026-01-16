@@ -139,6 +139,18 @@ def build_qcreport_dict(
         gm["tilt_deviation_db_per_oct"] = q(float(gm["tilt_deviation_db_per_oct"]), 0.001)
     if "true_peak_dbtp" in gm:
         gm["true_peak_dbtp"] = q(float(gm["true_peak_dbtp"]), 0.01)
+    if "tonal_peak_max_delta_db" in gm:
+        gm["tonal_peak_max_delta_db"] = q(float(gm["tonal_peak_max_delta_db"]), 0.01)
+    if "tonal_peaks" in gm:
+        for peak in gm["tonal_peaks"]:
+            if "frequency_hz" in peak:
+                peak["frequency_hz"] = q(float(peak["frequency_hz"]), 0.1)
+            if "level_db" in peak:
+                peak["level_db"] = q(float(peak["level_db"]), 0.01)
+            if "noise_floor_db" in peak and peak["noise_floor_db"] is not None:
+                peak["noise_floor_db"] = q(float(peak["noise_floor_db"]), 0.01)
+            if "delta_db" in peak and peak["delta_db"] is not None:
+                peak["delta_db"] = q(float(peak["delta_db"]), 0.01)
 
     if report.get("repair"):
         repair_metrics = report["repair"].get("metrics", {})

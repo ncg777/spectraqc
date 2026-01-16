@@ -205,6 +205,37 @@ def evaluate(
         if tp_stat == Status.FAIL:
             any_fail = True
 
+    # Tonal peak evaluation if configured
+    if (
+        global_metrics.tonal_peak_max_delta_db is not None
+        and "tonal_peak_delta_db" in thresholds
+    ):
+        tone_pass, tone_warn = thresholds["tonal_peak_delta_db"]
+        tone_stat = _status_high_is_bad(
+            float(global_metrics.tonal_peak_max_delta_db), tone_pass, tone_warn
+        )
+        global_decisions.append(
+            ThresholdResult(
+                metric="tonal_peak",
+                value=float(global_metrics.tonal_peak_max_delta_db),
+                units="dB",
+                status=tone_stat,
+                pass_limit=tone_pass,
+                warn_limit=tone_warn,
+                notes=_explain(
+                    metric="tonal_peak",
+                    value=float(global_metrics.tonal_peak_max_delta_db),
+                    units="dB",
+                    status=tone_stat,
+                    pass_lim=tone_pass,
+                    warn_lim=tone_warn,
+                    compare="above"
+                )
+            )
+        )
+        if tone_stat == Status.FAIL:
+            any_fail = True
+
     # Overall status determination
     warn_threshold = thresholds.get("warn_if_warn_band_count_at_least", 2)
     overall = (
