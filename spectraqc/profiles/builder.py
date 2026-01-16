@@ -250,6 +250,26 @@ def build_reference_profile(
                     "derivative_threshold": 0.2,
                     "min_separation_seconds": 0.005,
                 },
+                "peak_anomalies": {
+                    "channel_policy": "per_channel",
+                    "crest_factor": {
+                        "frame_seconds": 0.05,
+                        "hop_seconds": 0.025,
+                        "min_crest_db": 20.0,
+                        "warn_count": 3,
+                        "fail_count": 10,
+                        "warn_total_seconds": 0.1,
+                        "fail_total_seconds": 0.5,
+                    },
+                    "near_zero_peaks": {
+                        "threshold_dbfs": -0.2,
+                        "min_separation_seconds": 0.01,
+                        "warn_rate_per_s": 2.0,
+                        "fail_rate_per_s": 5.0,
+                        "warn_count": 5,
+                        "fail_count": 20,
+                    },
+                },
             },
             "aggregation": {
                 "warn_if_warn_band_count_at_least": 2,

@@ -100,6 +100,7 @@ def validate_reference_profile_dict(j: dict) -> None:
     dynamic_range_lu = rules.get("dynamic_range_lu", {})
     clipped_samples = rules.get("clipped_samples", {})
     clipped_runs = rules.get("clipped_runs", {})
+    peak_anomalies = rules.get("peak_anomalies", {})
     for name, obj in (("band_mean", band_mean), ("band_max", band_max), ("tilt", tilt)):
         p = obj.get("pass")
         w = obj.get("warn")
@@ -216,6 +217,43 @@ def validate_reference_profile_dict(j: dict) -> None:
             err("threshold_model.rules.transient_spikes.derivative_threshold must be > 0.")
         if _is_number(transient_spikes.get("min_separation_seconds")) and transient_spikes.get("min_separation_seconds") < 0:
             err("threshold_model.rules.transient_spikes.min_separation_seconds must be >= 0.")
+    if peak_anomalies:
+        channel_policy = peak_anomalies.get("channel_policy", "per_channel")
+        if channel_policy not in ("per_channel", "average"):
+            err("threshold_model.rules.peak_anomalies.channel_policy must be per_channel or average.")
+        crest_cfg = peak_anomalies.get("crest_factor", {})
+        peak_cfg = peak_anomalies.get("near_zero_peaks", {})
+        for key in ("frame_seconds", "hop_seconds", "min_crest_db"):
+            if key in crest_cfg and not _is_number(crest_cfg.get(key)):
+                err(f"threshold_model.rules.peak_anomalies.crest_factor.{key} must be a number.")
+        for key in ("warn_total_seconds", "fail_total_seconds"):
+            if key in crest_cfg and not _is_number(crest_cfg.get(key)):
+                err(f"threshold_model.rules.peak_anomalies.crest_factor.{key} must be a number.")
+        for key in ("warn_count", "fail_count"):
+            if key in crest_cfg and (not isinstance(crest_cfg.get(key), int) or crest_cfg.get(key) < 0):
+                err(f"threshold_model.rules.peak_anomalies.crest_factor.{key} must be a non-negative int.")
+        warn_count = crest_cfg.get("warn_count")
+        fail_count = crest_cfg.get("fail_count")
+        if isinstance(warn_count, int) and isinstance(fail_count, int) and fail_count < warn_count:
+            err("threshold_model.rules.peak_anomalies.crest_factor.fail_count must be >= warn_count.")
+        warn_seconds = crest_cfg.get("warn_total_seconds")
+        fail_seconds = crest_cfg.get("fail_total_seconds")
+        if _is_number(warn_seconds) and _is_number(fail_seconds) and fail_seconds < warn_seconds:
+            err("threshold_model.rules.peak_anomalies.crest_factor.fail_total_seconds must be >= warn_total_seconds.")
+        for key in ("threshold_dbfs", "min_separation_seconds", "warn_rate_per_s", "fail_rate_per_s"):
+            if key in peak_cfg and not _is_number(peak_cfg.get(key)):
+                err(f"threshold_model.rules.peak_anomalies.near_zero_peaks.{key} must be a number.")
+        for key in ("warn_count", "fail_count"):
+            if key in peak_cfg and (not isinstance(peak_cfg.get(key), int) or peak_cfg.get(key) < 0):
+                err(f"threshold_model.rules.peak_anomalies.near_zero_peaks.{key} must be a non-negative int.")
+        warn_count = peak_cfg.get("warn_count")
+        fail_count = peak_cfg.get("fail_count")
+        if isinstance(warn_count, int) and isinstance(fail_count, int) and fail_count < warn_count:
+            err("threshold_model.rules.peak_anomalies.near_zero_peaks.fail_count must be >= warn_count.")
+        warn_rate = peak_cfg.get("warn_rate_per_s")
+        fail_rate = peak_cfg.get("fail_rate_per_s")
+        if _is_number(warn_rate) and _is_number(fail_rate) and fail_rate < warn_rate:
+            err("threshold_model.rules.peak_anomalies.near_zero_peaks.fail_rate_per_s must be >= warn_rate_per_s.")
     by_band = rules.get("band_mean", {}).get("by_band", [])
     if isinstance(by_band, list):
         valid_names = {b.get("name") for b in bands if isinstance(b, dict)}

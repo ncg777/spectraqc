@@ -5,6 +5,7 @@ from spectraqc.types import ReferenceProfile, FrequencyBand
 from spectraqc.thresholds.brickwall import build_spectral_artifact_config
 from spectraqc.thresholds.level_metrics import DEFAULT_LEVEL_METRIC_THRESHOLDS
 from spectraqc.thresholds.level_anomalies import build_level_anomaly_config
+from spectraqc.thresholds.peak_anomalies import build_peak_anomaly_config
 from spectraqc.thresholds.transient_spikes import build_transient_spike_config
 from spectraqc.profiles.validator import validate_reference_profile_dict
 from spectraqc.metrics.tonal import derive_noise_floor_baselines
@@ -87,6 +88,9 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         ),
         "transient_spikes": build_transient_spike_config(
             tm.get("transient_spikes")
+        ),
+        "peak_anomalies": build_peak_anomaly_config(
+            tm.get("peak_anomalies")
         ),
     }
 

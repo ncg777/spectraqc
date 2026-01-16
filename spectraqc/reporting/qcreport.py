@@ -203,6 +203,38 @@ def build_qcreport_dict(
             _quantize_segment_block(channel.get("drop"))
             _quantize_segment_block(channel.get("zero"))
 
+    if "peak_anomalies" in gm:
+        def _quantize_peak_block(block: dict | None) -> None:
+            if not block:
+                return
+            if "frame_seconds" in block:
+                block["frame_seconds"] = q(float(block["frame_seconds"]), 0.001)
+            if "hop_seconds" in block:
+                block["hop_seconds"] = q(float(block["hop_seconds"]), 0.001)
+            if "min_crest_db" in block:
+                block["min_crest_db"] = q(float(block["min_crest_db"]), 0.01)
+            if "total_duration_s" in block:
+                block["total_duration_s"] = q(float(block["total_duration_s"]), 0.001)
+            if "max_crest_db" in block and block["max_crest_db"] is not None:
+                block["max_crest_db"] = q(float(block["max_crest_db"]), 0.01)
+
+        def _quantize_near_zero(block: dict | None) -> None:
+            if not block:
+                return
+            if "threshold_dbfs" in block:
+                block["threshold_dbfs"] = q(float(block["threshold_dbfs"]), 0.01)
+            if "min_separation_seconds" in block:
+                block["min_separation_seconds"] = q(float(block["min_separation_seconds"]), 0.001)
+            if "rate_per_s" in block:
+                block["rate_per_s"] = q(float(block["rate_per_s"]), 0.001)
+
+        peak_anomalies = gm["peak_anomalies"]
+        _quantize_peak_block(peak_anomalies.get("crest_factor"))
+        _quantize_near_zero(peak_anomalies.get("near_zero_peaks"))
+        for channel in peak_anomalies.get("channels", []):
+            _quantize_peak_block(channel.get("crest_factor"))
+            _quantize_near_zero(channel.get("near_zero_peaks"))
+
     if "silence" in gm:
         silence = gm["silence"]
         if "total_silence_s" in silence:
