@@ -33,6 +33,7 @@ from spectraqc.metrics.noise import noise_floor_dbfs_mono
 from spectraqc.metrics.clipping import detect_clipping_runs
 from spectraqc.metrics.level_anomalies import detect_level_anomalies
 from spectraqc.metrics.transient_spikes import detect_transient_spikes
+from spectraqc.metrics.peak_anomalies import detect_peak_anomalies
 from spectraqc.metrics.levels import (
     peak_dbfs_mono,
     rms_dbfs_mono,
@@ -55,6 +56,7 @@ from spectraqc.profiles.loader import load_reference_profile
 from spectraqc.thresholds.evaluator import evaluate
 from spectraqc.thresholds.brickwall import evaluate_spectral_artifacts
 from spectraqc.thresholds.level_anomalies import evaluate_level_anomalies
+from spectraqc.thresholds.peak_anomalies import evaluate_peak_anomalies
 from spectraqc.thresholds.silence_detection import (
     evaluate_silence_gaps,
     summarize_silence_gaps,
@@ -1456,6 +1458,16 @@ def _analyze_audio(
         level_anomalies,
         config=level_anomaly_cfg
     )
+    peak_anomaly_cfg = profile.thresholds.get("peak_anomalies", {})
+    peak_anomalies = detect_peak_anomalies(
+        audio.samples,
+        audio.fs,
+        config=peak_anomaly_cfg
+    )
+    peak_flags = evaluate_peak_anomalies(
+        peak_anomalies,
+        config=peak_anomaly_cfg
+    )
     transient_spikes = detect_transient_spikes(
         audio.samples,
         audio.fs,
@@ -1773,6 +1785,8 @@ def _analyze_audio(
         global_metrics_dict["transient_spikes"] = transient_spikes
     if clipping_metrics:
         global_metrics_dict["clipping"] = clipping_metrics
+    if peak_anomalies:
+        global_metrics_dict["peak_anomalies"] = peak_anomalies
     
     # Decisions for report
     decisions_dict = {
@@ -1823,7 +1837,7 @@ def _analyze_audio(
             }
             for gd in decision.global_decisions
         ],
-        "flags": spectral_flags + level_flags + gap_flags
+        "flags": spectral_flags + level_flags + gap_flags + peak_flags
     }
     
     # Confidence assessment
