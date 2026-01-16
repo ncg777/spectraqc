@@ -42,6 +42,7 @@ def load_reference_profile(path: str) -> ReferenceProfile:
     )
 
     analysis_lock = j.get("analysis_lock", {})
+    input_policy = j.get("input_policy", {})
     normalization = analysis_lock.get("normalization", {
         "loudness": {"enabled": False, "target_lufs_i": -14.0, "algorithm_id": ""},
         "true_peak": {"enabled": False, "max_dbtp": -1.0, "algorithm_id": ""}
@@ -272,6 +273,7 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         bands=bands,
         thresholds=thresholds,
         analysis_lock=analysis_lock,
+        input_policy=input_policy,
         algorithm_registry=algorithm_registry,
         normalization=normalization,
         noise_floor_by_band=noise_floor_by_band,

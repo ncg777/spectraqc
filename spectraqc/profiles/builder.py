@@ -195,6 +195,14 @@ def build_reference_profile(
                 },
             },
         },
+        "input_policy": {
+            "accepted_formats": sorted(SUPPORTED_AUDIO_EXTS),
+            "sample_rate_hz": {"min": 8000.0, "max": 192000.0},
+            "channels": {"allowed": [1, 2]},
+            "duration_s": {"min": 0.1},
+            "decode_backends": ["soundfile", "ffmpeg"],
+            "warn_on_decode_warnings": True,
+        },
         "corpus_stats": {
             "file_count": int(len(ref_audio_paths)),
             "total_duration_s": float(sum(durations)),

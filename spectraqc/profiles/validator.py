@@ -431,6 +431,56 @@ def validate_reference_profile_dict(j: dict) -> None:
     if channel_policy not in ("mono", "stereo_average", "mid_only", "per_channel"):
         err("analysis_lock.channel_policy must be one of mono, stereo_average, mid_only, per_channel.")
 
+    input_policy = j.get("input_policy", {})
+    if input_policy:
+        formats = input_policy.get("accepted_formats")
+        if formats is not None:
+            if not isinstance(formats, list) or not all(isinstance(fmt, str) and fmt for fmt in formats):
+                err("input_policy.accepted_formats must be a list of non-empty strings.")
+        sample_rate = input_policy.get("sample_rate_hz", {})
+        if sample_rate:
+            allowed = sample_rate.get("allowed")
+            if allowed is not None:
+                if not isinstance(allowed, list) or not all(_is_number(v) for v in allowed):
+                    err("input_policy.sample_rate_hz.allowed must be a list of numbers.")
+            for key in ("min", "max"):
+                if key in sample_rate and not _is_number(sample_rate.get(key)):
+                    err(f"input_policy.sample_rate_hz.{key} must be a number.")
+            if _is_number(sample_rate.get("min")) and _is_number(sample_rate.get("max")):
+                if sample_rate["max"] < sample_rate["min"]:
+                    err("input_policy.sample_rate_hz.max must be >= min.")
+        channels_cfg = input_policy.get("channels", {})
+        if channels_cfg:
+            allowed = channels_cfg.get("allowed")
+            if allowed is not None:
+                if (
+                    not isinstance(allowed, list)
+                    or not all(isinstance(v, int) and v > 0 for v in allowed)
+                ):
+                    err("input_policy.channels.allowed must be a list of positive integers.")
+            for key in ("min", "max"):
+                if key in channels_cfg and (not isinstance(channels_cfg.get(key), int) or channels_cfg.get(key) <= 0):
+                    err(f"input_policy.channels.{key} must be a positive integer.")
+            if isinstance(channels_cfg.get("min"), int) and isinstance(channels_cfg.get("max"), int):
+                if channels_cfg["max"] < channels_cfg["min"]:
+                    err("input_policy.channels.max must be >= min.")
+        duration_cfg = input_policy.get("duration_s", {})
+        if duration_cfg:
+            for key in ("min", "max"):
+                if key in duration_cfg and not _is_number(duration_cfg.get(key)):
+                    err(f"input_policy.duration_s.{key} must be a number.")
+            if _is_number(duration_cfg.get("min")) and _is_number(duration_cfg.get("max")):
+                if duration_cfg["max"] < duration_cfg["min"]:
+                    err("input_policy.duration_s.max must be >= min.")
+        backends = input_policy.get("decode_backends")
+        if backends is not None:
+            if not isinstance(backends, list) or not all(isinstance(v, str) and v for v in backends):
+                err("input_policy.decode_backends must be a list of non-empty strings.")
+        if "warn_on_decode_warnings" in input_policy and not isinstance(
+            input_policy.get("warn_on_decode_warnings"), bool
+        ):
+            err("input_policy.warn_on_decode_warnings must be boolean.")
+
     smoothing = analysis_lock.get("smoothing", {"type": "none"})
     if smoothing.get("type") not in ("none", "octave_fraction", "log_hz"):
         err("analysis_lock.smoothing.type must be none, octave_fraction, or log_hz.")
