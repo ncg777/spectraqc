@@ -263,6 +263,41 @@
                 "warn": { "type": "number" }
               },
               "additionalProperties": false
+            },
+            "level_anomalies": {
+              "type": "object",
+              "properties": {
+                "channel_policy": { "type": "string", "enum": ["per_channel", "average"] },
+                "drop": {
+                  "type": "object",
+                  "properties": {
+                    "frame_seconds": { "type": "number", "minimum": 0 },
+                    "hop_seconds": { "type": "number", "minimum": 0 },
+                    "baseline_window_seconds": { "type": "number", "minimum": 0 },
+                    "drop_db": { "type": "number" },
+                    "min_duration_seconds": { "type": "number", "minimum": 0 },
+                    "floor_dbfs": { "type": "number" },
+                    "warn_count": { "type": "integer", "minimum": 0 },
+                    "fail_count": { "type": "integer", "minimum": 0 },
+                    "warn_total_seconds": { "type": "number", "minimum": 0 },
+                    "fail_total_seconds": { "type": "number", "minimum": 0 }
+                  },
+                  "additionalProperties": false
+                },
+                "zero": {
+                  "type": "object",
+                  "properties": {
+                    "zero_threshold": { "type": "number", "minimum": 0 },
+                    "min_duration_seconds": { "type": "number", "minimum": 0 },
+                    "warn_count": { "type": "integer", "minimum": 0 },
+                    "fail_count": { "type": "integer", "minimum": 0 },
+                    "warn_total_seconds": { "type": "number", "minimum": 0 },
+                    "fail_total_seconds": { "type": "number", "minimum": 0 }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false

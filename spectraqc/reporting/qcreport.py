@@ -169,6 +169,32 @@ def build_qcreport_dict(
                 peak["noise_floor_db"] = q(float(peak["noise_floor_db"]), 0.01)
             if "delta_db" in peak and peak["delta_db"] is not None:
                 peak["delta_db"] = q(float(peak["delta_db"]), 0.01)
+    if "level_anomalies" in gm:
+        def _quantize_segment_block(block: dict | None) -> None:
+            if not block:
+                return
+            if "total_duration_s" in block:
+                block["total_duration_s"] = q(float(block["total_duration_s"]), 0.001)
+            for seg in block.get("segments", []):
+                if "start_s" in seg:
+                    seg["start_s"] = q(float(seg["start_s"]), 0.001)
+                if "end_s" in seg:
+                    seg["end_s"] = q(float(seg["end_s"]), 0.001)
+                if "duration_s" in seg:
+                    seg["duration_s"] = q(float(seg["duration_s"]), 0.001)
+                if "baseline_dbfs" in seg:
+                    seg["baseline_dbfs"] = q(float(seg["baseline_dbfs"]), 0.01)
+                if "level_dbfs" in seg:
+                    seg["level_dbfs"] = q(float(seg["level_dbfs"]), 0.01)
+                if "drop_db" in seg:
+                    seg["drop_db"] = q(float(seg["drop_db"]), 0.01)
+
+        level = gm["level_anomalies"]
+        _quantize_segment_block(level.get("drop"))
+        _quantize_segment_block(level.get("zero"))
+        for channel in level.get("channels", []):
+            _quantize_segment_block(channel.get("drop"))
+            _quantize_segment_block(channel.get("zero"))
 
     if report.get("repair"):
         repair_metrics = report["repair"].get("metrics", {})
