@@ -7,6 +7,7 @@ from spectraqc.thresholds.level_metrics import DEFAULT_LEVEL_METRIC_THRESHOLDS
 from spectraqc.thresholds.level_anomalies import build_level_anomaly_config
 from spectraqc.profiles.validator import validate_reference_profile_dict
 from spectraqc.metrics.tonal import derive_noise_floor_baselines
+from spectraqc.thresholds.silence_detection import build_silence_detection_config
 
 
 def load_reference_profile(path: str) -> ReferenceProfile:
@@ -80,7 +81,9 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         "level_anomalies": build_level_anomaly_config(
             tm.get("level_anomalies")
         ),
-        "silence_detection": tm.get("silence_detection", {}),
+        "silence_detection": build_silence_detection_config(
+            tm.get("silence_detection")
+        ),
     }
 
     peak_rules = tm.get("peak_dbfs") or DEFAULT_LEVEL_METRIC_THRESHOLDS.get("peak_dbfs")

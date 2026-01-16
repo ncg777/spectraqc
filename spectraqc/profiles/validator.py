@@ -274,14 +274,34 @@ def validate_reference_profile_dict(j: dict) -> None:
             err(f"analysis_lock.dynamic_range.short_term_lufs.{key} must be a number.")
 
     silence_cfg = analysis_lock.get("silence_detection", {})
-    for key in ("min_rms_dbfs", "frame_seconds", "hop_seconds", "min_duration_seconds"):
+    for key in (
+        "min_rms_dbfs",
+        "frame_seconds",
+        "hop_seconds",
+        "min_duration_seconds",
+        "leading_threshold_seconds",
+        "trailing_threshold_seconds",
+        "min_content_seconds",
+    ):
         if key in silence_cfg and not _is_number(silence_cfg.get(key)):
             err(f"analysis_lock.silence_detection.{key} must be a number.")
 
     silence_rules = rules.get("silence_detection", {})
-    for key in ("min_rms_dbfs", "frame_seconds", "hop_seconds", "min_duration_seconds"):
+    for key in (
+        "min_rms_dbfs",
+        "frame_seconds",
+        "hop_seconds",
+        "min_duration_seconds",
+        "leading_threshold_seconds",
+        "trailing_threshold_seconds",
+        "min_content_seconds",
+    ):
         if key in silence_rules and not _is_number(silence_rules.get(key)):
             err(f"threshold_model.rules.silence_detection.{key} must be a number.")
+    silence_gap_rules = silence_rules.get("gaps", {})
+    for key in ("warn_count", "fail_count", "warn_total_seconds", "fail_total_seconds"):
+        if key in silence_gap_rules and not _is_number(silence_gap_rules.get(key)):
+            err(f"threshold_model.rules.silence_detection.gaps.{key} must be a number.")
 
     if errors:
         raise ValueError("; ".join(errors))
