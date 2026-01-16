@@ -166,6 +166,22 @@ def build_reference_profile(
                 "derivative_threshold": 0.2,
                 "min_separation_seconds": 0.005,
             },
+            "broadband_transients": {
+                "method": "spectral_flux",
+                "channel_policy": "average",
+                "frame_seconds": 0.05,
+                "hop_seconds": 0.02,
+                "min_duration_seconds": 0.02,
+                "merge_gap_seconds": 0.02,
+                "flux_delta": 0.2,
+                "rms_delta_db": 12.0,
+                "gates": {
+                    "warn_count": 1,
+                    "fail_count": 3,
+                    "warn_total_seconds": 0.1,
+                    "fail_total_seconds": 0.3,
+                },
+            },
         },
         "corpus_stats": {
             "file_count": int(len(ref_audio_paths)),
@@ -205,6 +221,22 @@ def build_reference_profile(
                 "tonal_peak": {"pass": 6.0, "warn": 10.0},
                 "clipped_samples": DEFAULT_LEVEL_METRIC_THRESHOLDS["clipped_samples"],
                 "clipped_runs": DEFAULT_LEVEL_METRIC_THRESHOLDS["clipped_runs"],
+                "broadband_transients": {
+                    "method": "spectral_flux",
+                    "channel_policy": "average",
+                    "frame_seconds": 0.05,
+                    "hop_seconds": 0.02,
+                    "min_duration_seconds": 0.02,
+                    "merge_gap_seconds": 0.02,
+                    "flux_delta": 0.2,
+                    "rms_delta_db": 12.0,
+                    "gates": {
+                        "warn_count": 1,
+                        "fail_count": 3,
+                        "warn_total_seconds": 0.1,
+                        "fail_total_seconds": 0.3,
+                    },
+                },
                 "level_anomalies": {
                     "channel_policy": "per_channel",
                     "drop": {

@@ -33,6 +33,7 @@ from spectraqc.metrics.noise import noise_floor_dbfs_mono
 from spectraqc.metrics.clipping import detect_clipping_runs
 from spectraqc.metrics.level_anomalies import detect_level_anomalies
 from spectraqc.metrics.transient_spikes import detect_transient_spikes
+from spectraqc.metrics.broadband_transients import detect_broadband_transients
 from spectraqc.metrics.peak_anomalies import detect_peak_anomalies
 from spectraqc.metrics.levels import (
     peak_dbfs_mono,
@@ -62,6 +63,10 @@ from spectraqc.thresholds.silence_detection import (
     summarize_silence_gaps,
 )
 from spectraqc.thresholds.transient_spikes import build_transient_spike_config
+from spectraqc.thresholds.broadband_transients import (
+    build_broadband_transient_config,
+    evaluate_broadband_transients,
+)
 from spectraqc.reporting.qcreport import build_qcreport_dict
 from spectraqc.reporting.batch_summary import (
     build_batch_summary,
@@ -1418,6 +1423,13 @@ def _analyze_audio(
     transient_cfg = build_transient_spike_config(transient_defaults)
     if transient_override:
         transient_cfg = build_transient_spike_config({**transient_cfg, **transient_override})
+    broadband_defaults = profile.thresholds.get("broadband_transients", {})
+    broadband_override = analysis_lock.get("broadband_transients", {})
+    broadband_cfg = build_broadband_transient_config(broadband_defaults)
+    if broadband_override:
+        broadband_cfg = build_broadband_transient_config(
+            {**broadband_cfg, **broadband_override}
+        )
     if channel_policy == "per_channel" and mode != "exploratory":
         raise ValueError("per_channel policy is only supported in exploratory mode.")
     algo_registry = build_algorithm_registry(
@@ -1472,6 +1484,15 @@ def _analyze_audio(
         audio.samples,
         audio.fs,
         config=transient_cfg,
+    )
+    broadband_transients = detect_broadband_transients(
+        audio.samples,
+        audio.fs,
+        config=broadband_cfg,
+    )
+    broadband_flags = evaluate_broadband_transients(
+        broadband_transients,
+        config=broadband_cfg,
     )
 
     def _analyze_single(mono_audio):
@@ -1733,6 +1754,7 @@ def _analyze_audio(
             "effective_seconds": effective_duration
         },
         "transient_spikes": transient_cfg,
+        "broadband_transients": broadband_cfg,
     }
     
     # Band metrics for report
@@ -1783,6 +1805,8 @@ def _analyze_audio(
         global_metrics_dict["silence"] = silence_metrics
     if transient_spikes:
         global_metrics_dict["transient_spikes"] = transient_spikes
+    if broadband_transients:
+        global_metrics_dict["broadband_transients"] = broadband_transients
     if clipping_metrics:
         global_metrics_dict["clipping"] = clipping_metrics
     if peak_anomalies:
@@ -1837,7 +1861,7 @@ def _analyze_audio(
             }
             for gd in decision.global_decisions
         ],
-        "flags": spectral_flags + level_flags + gap_flags + peak_flags
+        "flags": spectral_flags + level_flags + gap_flags + peak_flags + broadband_flags
     }
     
     # Confidence assessment
