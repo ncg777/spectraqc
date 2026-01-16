@@ -1,10 +1,12 @@
 """Audio I/O module."""
 from __future__ import annotations
+import hashlib
 import json
 import re
 import shutil
 import subprocess
 import warnings as py_warnings
+from pathlib import Path
 import numpy as np
 from spectraqc.types import AudioBuffer
 
@@ -43,6 +45,98 @@ def _infer_bit_depth_from_text(text: str | None) -> int | None:
     if "double" in normalized:
         return 64
     return None
+
+
+def _extract_flac_md5(extra_info: str | None) -> str | None:
+    if not extra_info:
+        return None
+    match = re.search(r"md5\s*[:=]\s*([0-9a-f]{32})", extra_info, re.IGNORECASE)
+    if match:
+        return match.group(1).lower()
+    return None
+
+
+def _pcm_bytes_from_int(data: np.ndarray, bit_depth: int) -> bytes:
+    if bit_depth <= 8:
+        return np.asarray(data, dtype="<i1").tobytes()
+    if bit_depth <= 16:
+        return np.asarray(data, dtype="<i2").tobytes()
+    if bit_depth <= 24:
+        raw = np.asarray(data, dtype="<i4").tobytes()
+        packed = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 4)
+        return packed[:, :3].tobytes()
+    if bit_depth <= 32:
+        return np.asarray(data, dtype="<i4").tobytes()
+    raise ValueError(f"Unsupported PCM bit depth: {bit_depth}")
+
+
+def _compute_flac_pcm_md5(path: str) -> str | None:
+    import soundfile as sf
+    info = sf.info(path)
+    bit_depth = info.bits or _infer_bit_depth_from_text(getattr(info, "subtype", None))
+    if bit_depth is None:
+        return None
+    if isinstance(info.subtype, str) and info.subtype.lower().startswith("float"):
+        return None
+    dtype: str
+    if bit_depth <= 8:
+        dtype = "int8"
+    elif bit_depth <= 16:
+        dtype = "int16"
+    else:
+        dtype = "int32"
+    data = sf.read(path, always_2d=True, dtype=dtype)[0]
+    pcm_bytes = _pcm_bytes_from_int(data, bit_depth)
+    return hashlib.md5(pcm_bytes).hexdigest()
+
+
+def extract_audio_checksum(path: str) -> dict:
+    """Extract embedded checksums and validate against decoded audio data."""
+    ext = Path(path).suffix.lower()
+    if ext != ".flac":
+        return {
+            "algorithm": "flac_md5",
+            "embedded": None,
+            "computed": None,
+            "status": "unsupported",
+        }
+    import soundfile as sf
+    embedded = None
+    computed = None
+    error = None
+    try:
+        info = sf.info(path)
+        embedded = _extract_flac_md5(getattr(info, "extra_info", None))
+        computed = _compute_flac_pcm_md5(path)
+    except Exception as exc:
+        error = str(exc)
+    status = "unavailable"
+    if embedded and computed:
+        status = "match" if embedded.lower() == computed.lower() else "mismatch"
+    elif embedded and not computed:
+        status = "unverified"
+    elif not embedded and computed:
+        status = "absent"
+    if error:
+        status = "error"
+    payload = {
+        "algorithm": "flac_md5",
+        "embedded": embedded,
+        "computed": computed,
+        "status": status,
+    }
+    if error:
+        payload["error"] = error
+    return payload
+
+
+def hash_audio_data(audio: AudioBuffer) -> str:
+    """Compute deterministic SHA256 hash for analyzed audio data."""
+    h = hashlib.sha256()
+    h.update(str(audio.fs).encode("utf-8"))
+    h.update(str(audio.channels).encode("utf-8"))
+    h.update(audio.samples.tobytes())
+    return h.hexdigest()
 
 
 def _decode_soundfile(path: str) -> tuple[np.ndarray, float, list[str], int | None]:
