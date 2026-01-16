@@ -2,11 +2,15 @@
 name = "spectraqc"
 version = "1.0.0"
 description = "Spectral QC tool (V1 CLI)"
+license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
   "numpy>=2.0",
   "pyyaml>=6.0",
   "soundfile>=0.12.1",
+]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
 ]
 
 [project.optional-dependencies]
