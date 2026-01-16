@@ -219,6 +219,22 @@ def build_reference_profile(
                 "dynamic_range_db": {"pass": 8.0, "warn": 6.0},
                 "dynamic_range_lu": {"pass": 8.0, "warn": 6.0},
                 "tonal_peak": {"pass": 6.0, "warn": 10.0},
+                "stereo_correlation": {
+                    "frame_seconds": 0.5,
+                    "hop_seconds": 0.25,
+                    "mean": {
+                        "pass_min": 0.4,
+                        "warn_min": 0.2,
+                        "pass_max": 1.0,
+                        "warn_max": 1.0,
+                    },
+                    "min": {
+                        "pass_min": 0.0,
+                        "warn_min": -0.2,
+                        "pass_max": 1.0,
+                        "warn_max": 1.0,
+                    },
+                },
                 "clipped_samples": DEFAULT_LEVEL_METRIC_THRESHOLDS["clipped_samples"],
                 "clipped_runs": DEFAULT_LEVEL_METRIC_THRESHOLDS["clipped_runs"],
                 "broadband_transients": {

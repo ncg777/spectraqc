@@ -312,6 +312,17 @@ def build_qcreport_dict(
             if "clipped_ratio" in channel:
                 channel["clipped_ratio"] = q(float(channel["clipped_ratio"]), 0.000001)
 
+    if "stereo_correlation" in gm:
+        corr = gm["stereo_correlation"]
+        if "frame_seconds" in corr and corr["frame_seconds"] is not None:
+            corr["frame_seconds"] = q(float(corr["frame_seconds"]), 0.001)
+        if "hop_seconds" in corr and corr["hop_seconds"] is not None:
+            corr["hop_seconds"] = q(float(corr["hop_seconds"]), 0.001)
+        if "mean" in corr and corr["mean"] is not None:
+            corr["mean"] = q(float(corr["mean"]), 0.001)
+        if "min" in corr and corr["min"] is not None:
+            corr["min"] = q(float(corr["min"]), 0.001)
+
     if report.get("repair"):
         repair_metrics = report["repair"].get("metrics", {})
         for key in ("before", "after", "delta"):

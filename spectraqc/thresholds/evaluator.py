@@ -36,6 +36,21 @@ def _status_low_is_bad(value: float, pass_lim: float, warn_lim: float) -> Status
     return Status.FAIL
 
 
+def _status_range(
+    value: float,
+    pass_min: float,
+    pass_max: float,
+    warn_min: float,
+    warn_max: float,
+) -> Status:
+    """Evaluate status based on expected range thresholds."""
+    if pass_min <= value <= pass_max:
+        return Status.PASS
+    if warn_min <= value <= warn_max:
+        return Status.WARN
+    return Status.FAIL
+
+
 def _explain(
     *,
     metric: str,
@@ -51,6 +66,27 @@ def _explain(
         return ""
     thr = f"pass<= {pass_lim:g} {units}, warn<= {warn_lim:g} {units}"
     return f"{metric} is {compare} threshold: {value:.3f} {units} ({thr})."
+
+
+def _explain_range(
+    *,
+    metric: str,
+    value: float,
+    units: str,
+    status: Status,
+    pass_min: float,
+    pass_max: float,
+    warn_min: float,
+    warn_max: float,
+) -> str:
+    """Build a short explanation for range-based thresholds."""
+    if status == Status.PASS:
+        return ""
+    thr = (
+        f"pass {pass_min:g}..{pass_max:g} {units}, "
+        f"warn {warn_min:g}..{warn_max:g} {units}"
+    )
+    return f"{metric} outside expected range: {value:.3f} {units} ({thr})."
 
 
 def evaluate(
@@ -474,6 +510,74 @@ def evaluate(
             )
         )
         if run_stat == Status.FAIL:
+            any_fail = True
+
+    if (
+        global_metrics.stereo_correlation_mean is not None
+        and global_metrics.stereo_correlation_min is not None
+        and "stereo_correlation" in thresholds
+    ):
+        corr_cfg = thresholds["stereo_correlation"]
+        mean_cfg = corr_cfg["mean"]
+        mean_stat = _status_range(
+            float(global_metrics.stereo_correlation_mean),
+            mean_cfg["pass_min"],
+            mean_cfg["pass_max"],
+            mean_cfg["warn_min"],
+            mean_cfg["warn_max"],
+        )
+        global_decisions.append(
+            ThresholdResult(
+                metric="stereo_correlation_mean",
+                value=float(global_metrics.stereo_correlation_mean),
+                units="corr",
+                status=mean_stat,
+                pass_limit=mean_cfg["pass_min"],
+                warn_limit=mean_cfg["warn_min"],
+                notes=_explain_range(
+                    metric="stereo_correlation_mean",
+                    value=float(global_metrics.stereo_correlation_mean),
+                    units="corr",
+                    status=mean_stat,
+                    pass_min=mean_cfg["pass_min"],
+                    pass_max=mean_cfg["pass_max"],
+                    warn_min=mean_cfg["warn_min"],
+                    warn_max=mean_cfg["warn_max"],
+                ),
+            )
+        )
+        if mean_stat == Status.FAIL:
+            any_fail = True
+
+        min_cfg = corr_cfg["min"]
+        min_stat = _status_range(
+            float(global_metrics.stereo_correlation_min),
+            min_cfg["pass_min"],
+            min_cfg["pass_max"],
+            min_cfg["warn_min"],
+            min_cfg["warn_max"],
+        )
+        global_decisions.append(
+            ThresholdResult(
+                metric="stereo_correlation_min",
+                value=float(global_metrics.stereo_correlation_min),
+                units="corr",
+                status=min_stat,
+                pass_limit=min_cfg["pass_min"],
+                warn_limit=min_cfg["warn_min"],
+                notes=_explain_range(
+                    metric="stereo_correlation_min",
+                    value=float(global_metrics.stereo_correlation_min),
+                    units="corr",
+                    status=min_stat,
+                    pass_min=min_cfg["pass_min"],
+                    pass_max=min_cfg["pass_max"],
+                    warn_min=min_cfg["warn_min"],
+                    warn_max=min_cfg["warn_max"],
+                ),
+            )
+        )
+        if min_stat == Status.FAIL:
             any_fail = True
 
     # Tonal peak evaluation if configured

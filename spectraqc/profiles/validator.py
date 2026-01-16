@@ -101,6 +101,7 @@ def validate_reference_profile_dict(j: dict) -> None:
     clipped_samples = rules.get("clipped_samples", {})
     clipped_runs = rules.get("clipped_runs", {})
     peak_anomalies = rules.get("peak_anomalies", {})
+    stereo_corr = rules.get("stereo_correlation", {})
     for name, obj in (("band_mean", band_mean), ("band_max", band_max), ("tilt", tilt)):
         p = obj.get("pass")
         w = obj.get("warn")
@@ -138,6 +139,32 @@ def validate_reference_profile_dict(j: dict) -> None:
         w = obj.get("warn")
         if not _is_number(p) or not _is_number(w) or p < w:
             err(f"threshold_model.rules.{name} pass/warn must be numbers with pass>=warn.")
+    if stereo_corr:
+        for key in ("frame_seconds", "hop_seconds"):
+            if key in stereo_corr and not _is_number(stereo_corr.get(key)):
+                err(f"threshold_model.rules.stereo_correlation.{key} must be a number.")
+        for name in ("mean", "min"):
+            cfg = stereo_corr.get(name, {})
+            if not cfg:
+                continue
+            pass_min = cfg.get("pass_min")
+            pass_max = cfg.get("pass_max")
+            warn_min = cfg.get("warn_min")
+            warn_max = cfg.get("warn_max")
+            if not _is_number(pass_min) or not _is_number(pass_max):
+                err(f"threshold_model.rules.stereo_correlation.{name} pass_min/pass_max must be numbers.")
+                continue
+            if pass_max < pass_min:
+                err(f"threshold_model.rules.stereo_correlation.{name} pass_max must be >= pass_min.")
+            if not _is_number(warn_min) or not _is_number(warn_max):
+                err(f"threshold_model.rules.stereo_correlation.{name} warn_min/warn_max must be numbers.")
+                continue
+            if warn_max < warn_min:
+                err(f"threshold_model.rules.stereo_correlation.{name} warn_max must be >= warn_min.")
+            if warn_min > pass_min or warn_max < pass_max:
+                err(
+                    f"threshold_model.rules.stereo_correlation.{name} warn range must include pass range."
+                )
     spectral_artifacts = rules.get("spectral_artifacts", {})
     if spectral_artifacts:
         cutoff = spectral_artifacts.get("cutoff", {})

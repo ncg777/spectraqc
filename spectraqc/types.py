@@ -64,6 +64,8 @@ class GlobalMetrics:
     dynamic_range_lu: float | None = None
     clipped_samples: int | None = None
     clipped_runs: int | None = None
+    stereo_correlation_mean: float | None = None
+    stereo_correlation_min: float | None = None
 
 
 @dataclass(frozen=True)
