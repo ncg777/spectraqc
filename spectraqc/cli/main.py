@@ -46,7 +46,10 @@ from spectraqc.metrics.dr import (
     dynamic_range_short_term_lufs_mono,
 )
 from spectraqc.metrics.loudness import loudness_metrics_mono
-from spectraqc.metrics.correlation import correlation_summary
+from spectraqc.metrics.correlation import (
+    correlation_summary,
+    estimate_interchannel_delay,
+)
 from spectraqc.dsp.repair import apply_repair_plan, compute_repair_metrics
 from spectraqc.algorithms.registry import (
     build_algorithm_registry,
@@ -1344,9 +1347,11 @@ def _analyze_audio(
     ref_tilt = spectral_tilt_db_per_oct(profile.freqs_hz, profile.ref_mean_db)
     channel_policy = str(analysis_lock.get("channel_policy", "mono")).strip().lower()
     corr_cfg = profile.thresholds.get("stereo_correlation", {})
+    delay_cfg = profile.thresholds.get("inter_channel_delay", {})
     corr_stats = None
     corr_frame_seconds = None
     corr_hop_seconds = None
+    delay_stats = None
     if corr_cfg and audio.channels == 2:
         corr_frame_seconds = float(corr_cfg.get("frame_seconds", 0.5))
         corr_hop_seconds = float(corr_cfg.get("hop_seconds", 0.25))
@@ -1355,6 +1360,12 @@ def _analyze_audio(
             audio.fs,
             frame_seconds=corr_frame_seconds,
             hop_seconds=corr_hop_seconds,
+        )
+    if delay_cfg and audio.channels == 2:
+        delay_stats = estimate_interchannel_delay(
+            audio.samples,
+            audio.fs,
+            max_delay_seconds=float(delay_cfg.get("max_delay_seconds", 0.01)),
         )
     silence_defaults = profile.thresholds.get("silence_detection", {})
     silence_override = analysis_lock.get("silence_detection", {})
@@ -1633,6 +1644,9 @@ def _analyze_audio(
             clipped_runs=clipping_metrics.get("run_count"),
             stereo_correlation_mean=None if corr_stats is None else corr_stats.get("mean"),
             stereo_correlation_min=None if corr_stats is None else corr_stats.get("min"),
+            inter_channel_delay_seconds=None if delay_stats is None else delay_stats.get("delay_seconds"),
+            inter_channel_delay_samples=None if delay_stats is None else delay_stats.get("delay_samples"),
+            inter_channel_delay_correlation=None if delay_stats is None else delay_stats.get("correlation"),
         )
 
         spectral_artifacts = detect_spectral_artifacts(
@@ -1835,6 +1849,13 @@ def _analyze_audio(
             "min": corr_stats.get("min"),
             "count": corr_stats.get("count"),
         }
+    if delay_stats and delay_stats.get("delay_seconds") is not None:
+        global_metrics_dict["inter_channel_delay"] = {
+            "delay_seconds": delay_stats.get("delay_seconds"),
+            "delay_samples": delay_stats.get("delay_samples"),
+            "correlation": delay_stats.get("correlation"),
+            "max_delay_seconds": None if delay_cfg is None else delay_cfg.get("max_delay_seconds"),
+        }
     
     # Decisions for report
     decisions_dict = {
@@ -1887,6 +1908,26 @@ def _analyze_audio(
         ],
         "flags": spectral_flags + level_flags + gap_flags + peak_flags + broadband_flags
     }
+
+    if "inter_channel_delay" in global_metrics_dict:
+        delay_decision = next(
+            (
+                gd
+                for gd in decision.global_decisions
+                if gd.metric == "inter_channel_delay_seconds"
+            ),
+            None,
+        )
+        if delay_decision is not None:
+            global_metrics_dict["inter_channel_delay"]["status"] = (
+                delay_decision.status.value
+            )
+            global_metrics_dict["inter_channel_delay"]["pass_limit"] = (
+                delay_decision.pass_limit
+            )
+            global_metrics_dict["inter_channel_delay"]["warn_limit"] = (
+                delay_decision.warn_limit
+            )
     
     # Confidence assessment
     confidence = _build_confidence(

@@ -323,6 +323,21 @@ def build_qcreport_dict(
         if "min" in corr and corr["min"] is not None:
             corr["min"] = q(float(corr["min"]), 0.001)
 
+    if "inter_channel_delay" in gm:
+        delay = gm["inter_channel_delay"]
+        if "delay_seconds" in delay and delay["delay_seconds"] is not None:
+            delay["delay_seconds"] = q(float(delay["delay_seconds"]), 0.0001)
+        if "delay_samples" in delay and delay["delay_samples"] is not None:
+            delay["delay_samples"] = int(round(float(delay["delay_samples"])))
+        if "correlation" in delay and delay["correlation"] is not None:
+            delay["correlation"] = q(float(delay["correlation"]), 0.001)
+        if "max_delay_seconds" in delay and delay["max_delay_seconds"] is not None:
+            delay["max_delay_seconds"] = q(float(delay["max_delay_seconds"]), 0.0001)
+        if "pass_limit" in delay and delay["pass_limit"] is not None:
+            delay["pass_limit"] = q(float(delay["pass_limit"]), 0.0001)
+        if "warn_limit" in delay and delay["warn_limit"] is not None:
+            delay["warn_limit"] = q(float(delay["warn_limit"]), 0.0001)
+
     if report.get("repair"):
         repair_metrics = report["repair"].get("metrics", {})
         for key in ("before", "after", "delta"):

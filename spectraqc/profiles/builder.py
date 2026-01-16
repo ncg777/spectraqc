@@ -235,6 +235,11 @@ def build_reference_profile(
                         "warn_max": 1.0,
                     },
                 },
+                "inter_channel_delay": {
+                    "max_delay_seconds": 0.01,
+                    "pass": 0.0005,
+                    "warn": 0.001,
+                },
                 "clipped_samples": DEFAULT_LEVEL_METRIC_THRESHOLDS["clipped_samples"],
                 "clipped_runs": DEFAULT_LEVEL_METRIC_THRESHOLDS["clipped_runs"],
                 "broadband_transients": {

@@ -102,6 +102,7 @@ def validate_reference_profile_dict(j: dict) -> None:
     clipped_runs = rules.get("clipped_runs", {})
     peak_anomalies = rules.get("peak_anomalies", {})
     stereo_corr = rules.get("stereo_correlation", {})
+    inter_channel_delay = rules.get("inter_channel_delay", {})
     for name, obj in (("band_mean", band_mean), ("band_max", band_max), ("tilt", tilt)):
         p = obj.get("pass")
         w = obj.get("warn")
@@ -165,6 +166,18 @@ def validate_reference_profile_dict(j: dict) -> None:
                 err(
                     f"threshold_model.rules.stereo_correlation.{name} warn range must include pass range."
                 )
+    if inter_channel_delay:
+        max_delay_seconds = inter_channel_delay.get("max_delay_seconds")
+        if max_delay_seconds is not None and not _is_number(max_delay_seconds):
+            err("threshold_model.rules.inter_channel_delay.max_delay_seconds must be a number.")
+        if _is_number(max_delay_seconds) and max_delay_seconds <= 0:
+            err("threshold_model.rules.inter_channel_delay.max_delay_seconds must be > 0.")
+        p = inter_channel_delay.get("pass")
+        w = inter_channel_delay.get("warn")
+        if not _is_number(p) or not _is_number(w) or w < p:
+            err("threshold_model.rules.inter_channel_delay pass/warn must be numbers with warn>=pass.")
+        if _is_number(p) and p < 0:
+            err("threshold_model.rules.inter_channel_delay pass must be >= 0.")
     spectral_artifacts = rules.get("spectral_artifacts", {})
     if spectral_artifacts:
         cutoff = spectral_artifacts.get("cutoff", {})
