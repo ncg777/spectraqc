@@ -19,7 +19,12 @@ import soundfile as sf
 
 from spectraqc.version import __version__
 from spectraqc.types import Status, GlobalMetrics
-from spectraqc.io.audio import load_audio, apply_channel_policy
+from spectraqc.io.audio import (
+    apply_channel_policy,
+    extract_audio_checksum,
+    hash_audio_data,
+    load_audio,
+)
 from spectraqc.io.policy import evaluate_input_policy
 from spectraqc.analysis.ltpsd import compute_ltpsd
 from spectraqc.metrics.grid import interp_to_grid, interp_var_ratio
@@ -1305,11 +1310,13 @@ def _build_input_meta(audio_path: str, audio, fs: float, duration: float) -> dic
     pcm_bytes = audio.samples.tobytes()
     import hashlib
     pcm_hash = hashlib.sha256(pcm_bytes).hexdigest()
+    checksum = extract_audio_checksum(audio_path)
     
     return {
         "path": str(Path(audio_path).resolve()),
         "file_hash_sha256": file_hash,
         "decoded_pcm_hash_sha256": pcm_hash,
+        "checksum": checksum,
         "fs_hz": fs,
         "channels": int(audio.channels),
         "bit_depth": audio.bit_depth,
@@ -1801,6 +1808,7 @@ def _analyze_audio(
         "report_id": report_id,
         "created_utc": now_utc,
         "mode": mode,
+        "analysis_data_hash_sha256": hash_audio_data(analysis_buffer),
         "resampled_fs_hz": analysis_buffer.fs,
         "channel_policy": str(channel_policy),
         "fft_size": nfft,
