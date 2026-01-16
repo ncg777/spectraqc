@@ -9,6 +9,7 @@ from spectraqc.analysis.bands import default_streaming_bands
 from spectraqc.analysis.ltpsd import compute_ltpsd
 from spectraqc.algorithms.registry import (
     LOUDNESS_ALGO_ID,
+    STEREO_CORRELATION_ALGO_ID,
     TRUE_PEAK_ALGO_ID,
     algorithm_ids_from_registry,
     build_algorithm_registry,
@@ -81,6 +82,11 @@ def build_reference_profile(
             "window": "hann",
             "psd_estimator": "welch",
             "channel_policy": "mono",
+            "stereo_correlation": {
+                "frame_seconds": 0.5,
+                "hop_seconds": 0.25,
+                "inversion_threshold": -0.8,
+            },
         },
         smoothing_cfg={"type": "octave_fraction", "octave_fraction": octave_fraction},
         channel_policy="mono",
@@ -127,6 +133,12 @@ def build_reference_profile(
                 "octave_fraction": octave_fraction,
             },
             "channel_policy": "mono",
+            "stereo_correlation": {
+                "algorithm_id": STEREO_CORRELATION_ALGO_ID,
+                "frame_seconds": 0.5,
+                "hop_seconds": 0.25,
+                "inversion_threshold": -0.8,
+            },
             "silence_detection": {
                 "min_rms_dbfs": -60.0,
                 "frame_seconds": 0.1,
@@ -235,6 +247,11 @@ def build_reference_profile(
                         "warn_min": -0.2,
                         "pass_max": 1.0,
                         "warn_max": 1.0,
+                    },
+                    "inversion": {
+                        "threshold": -0.8,
+                        "pass": 0.05,
+                        "warn": 0.2,
                     },
                 },
                 "inter_channel_delay": {

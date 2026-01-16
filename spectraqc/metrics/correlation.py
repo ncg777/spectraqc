@@ -85,6 +85,59 @@ def correlation_summary(
     }
 
 
+def sign_inverted_correlation_summary(
+    samples: np.ndarray,
+    fs: float,
+    *,
+    frame_seconds: float = 0.5,
+    hop_seconds: float = 0.25,
+    inversion_threshold: float = -0.8,
+) -> dict:
+    """
+    Detect sign-inverted stereo correlation in windowed audio.
+
+    Args:
+        samples: Stereo audio samples shaped (n, 2).
+        fs: Sample rate in Hz.
+        frame_seconds: Window length in seconds.
+        hop_seconds: Hop length in seconds.
+        inversion_threshold: Correlation threshold indicating sign inversion.
+
+    Returns:
+        Dictionary with inverted window ratio and counts.
+    """
+    corr = windowed_correlation_coefficients(
+        samples,
+        fs,
+        frame_seconds=frame_seconds,
+        hop_seconds=hop_seconds,
+    )
+    if corr.size == 0:
+        return {
+            "ratio": None,
+            "count": 0,
+            "inverted_count": 0,
+            "threshold": float(inversion_threshold),
+        }
+    finite = corr[np.isfinite(corr)]
+    if finite.size == 0:
+        return {
+            "ratio": None,
+            "count": 0,
+            "inverted_count": 0,
+            "threshold": float(inversion_threshold),
+        }
+    inverted = finite <= float(inversion_threshold)
+    inverted_count = int(np.sum(inverted))
+    ratio = float(inverted_count) / float(finite.size)
+    return {
+        "ratio": ratio,
+        "count": int(finite.size),
+        "inverted_count": inverted_count,
+        "threshold": float(inversion_threshold),
+    }
+
+
 def estimate_interchannel_delay(
     samples: np.ndarray,
     fs: float,

@@ -68,6 +68,7 @@ class GlobalMetrics:
     clipped_runs: int | None = None
     stereo_correlation_mean: float | None = None
     stereo_correlation_min: float | None = None
+    sign_inverted_correlation_ratio: float | None = None
     inter_channel_delay_seconds: float | None = None
     inter_channel_delay_samples: int | None = None
     inter_channel_delay_correlation: float | None = None

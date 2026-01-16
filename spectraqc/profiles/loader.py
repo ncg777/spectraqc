@@ -232,6 +232,13 @@ def load_reference_profile(path: str) -> ReferenceProfile:
             "hop_seconds": float(corr_rules.get("hop_seconds", 0.25)),
             "mean": _range_cfg(corr_rules.get("mean", {}), default_min=0.0, default_max=1.0),
             "min": _range_cfg(corr_rules.get("min", {}), default_min=-1.0, default_max=1.0),
+            "inversion": {
+                "threshold": float(
+                    corr_rules.get("inversion", {}).get("threshold", -0.8)
+                ),
+                "pass": float(corr_rules.get("inversion", {}).get("pass", 0.05)),
+                "warn": float(corr_rules.get("inversion", {}).get("warn", 0.2)),
+            },
         }
 
     if delay_rules:

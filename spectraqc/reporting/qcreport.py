@@ -332,6 +332,12 @@ def build_qcreport_dict(
             corr["mean"] = q(float(corr["mean"]), 0.001)
         if "min" in corr and corr["min"] is not None:
             corr["min"] = q(float(corr["min"]), 0.001)
+        if "inversion_threshold" in corr and corr["inversion_threshold"] is not None:
+            corr["inversion_threshold"] = q(float(corr["inversion_threshold"]), 0.001)
+        if "inverted_ratio" in corr and corr["inverted_ratio"] is not None:
+            corr["inverted_ratio"] = q(float(corr["inverted_ratio"]), 0.0001)
+        if "inverted_count" in corr and corr["inverted_count"] is not None:
+            corr["inverted_count"] = int(round(float(corr["inverted_count"])))
 
     if "inter_channel_delay" in gm:
         delay = gm["inter_channel_delay"]
