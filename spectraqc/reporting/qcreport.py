@@ -1,5 +1,6 @@
 from __future__ import annotations
 import numpy as np
+from spectraqc.reporting.alerts import build_alerts
 from spectraqc.utils.hashing import sha256_hex_canonical_json
 from spectraqc.utils.quantize import q, q_list
 
@@ -88,6 +89,10 @@ def build_qcreport_dict(
         }
     }
 
+    alerts = build_alerts(decisions)
+    if alerts:
+        report["alerts"] = alerts
+
     if repair is not None:
         report["repair"] = repair
 
@@ -147,6 +152,8 @@ def build_qcreport_dict(
         gm["peak_dbfs"] = q(float(gm["peak_dbfs"]), 0.01)
     if "rms_dbfs" in gm:
         gm["rms_dbfs"] = q(float(gm["rms_dbfs"]), 0.01)
+    if "lufs_i" in gm:
+        gm["lufs_i"] = q(float(gm["lufs_i"]), 0.01)
     if "crest_factor_db" in gm:
         gm["crest_factor_db"] = q(float(gm["crest_factor_db"]), 0.01)
     if "lra_lu" in gm:

@@ -3,6 +3,7 @@ import json
 import numpy as np
 from spectraqc.types import ReferenceProfile, FrequencyBand
 from spectraqc.thresholds.brickwall import build_spectral_artifact_config
+from spectraqc.thresholds.level_metrics import DEFAULT_LEVEL_METRIC_THRESHOLDS
 from spectraqc.thresholds.level_anomalies import build_level_anomaly_config
 from spectraqc.profiles.validator import validate_reference_profile_dict
 from spectraqc.metrics.tonal import derive_noise_floor_baselines
@@ -81,18 +82,25 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         ),
     }
 
-    peak_rules = tm.get("peak_dbfs")
+    peak_rules = tm.get("peak_dbfs") or DEFAULT_LEVEL_METRIC_THRESHOLDS.get("peak_dbfs")
     if peak_rules:
         thresholds["peak_dbfs"] = (
             float(peak_rules["pass"]),
             float(peak_rules["warn"]),
         )
 
-    rms_rules = tm.get("rms_dbfs")
+    rms_rules = tm.get("rms_dbfs") or DEFAULT_LEVEL_METRIC_THRESHOLDS.get("rms_dbfs")
     if rms_rules:
         thresholds["rms_dbfs"] = (
             float(rms_rules["pass"]),
             float(rms_rules["warn"]),
+        )
+
+    lufs_rules = tm.get("lufs_i") or DEFAULT_LEVEL_METRIC_THRESHOLDS.get("lufs_i")
+    if lufs_rules:
+        thresholds["lufs_i"] = (
+            float(lufs_rules["pass"]),
+            float(lufs_rules["warn"]),
         )
 
     noise_floor_rules = tm.get("noise_floor_dbfs")
@@ -137,11 +145,23 @@ def load_reference_profile(path: str) -> ReferenceProfile:
             float(tonal_rules["warn"]),
         )
 
-    # True peak threshold if enabled
-    tp = normalization.get("true_peak", {})
-    if bool(tp.get("enabled", False)):
-        max_dbtp = float(tp.get("max_dbtp", -1.0))
-        thresholds["true_peak_dbtp"] = (max_dbtp, max_dbtp + 0.5)
+    tp_rules = tm.get("true_peak_dbtp")
+    if tp_rules:
+        thresholds["true_peak_dbtp"] = (
+            float(tp_rules["pass"]),
+            float(tp_rules["warn"]),
+        )
+    else:
+        tp_default = DEFAULT_LEVEL_METRIC_THRESHOLDS.get("true_peak_dbtp", {})
+        tp = normalization.get("true_peak", {})
+        if bool(tp.get("enabled", False)):
+            max_dbtp = float(tp.get("max_dbtp", tp_default.get("pass", -1.0)))
+            thresholds["true_peak_dbtp"] = (max_dbtp, max_dbtp + 0.5)
+        elif tp_default:
+            thresholds["true_peak_dbtp"] = (
+                float(tp_default["pass"]),
+                float(tp_default["warn"]),
+            )
 
     noise_floor_defaults = derive_noise_floor_baselines(freqs, ref_mean, bands)
     noise_floor_baselines = {

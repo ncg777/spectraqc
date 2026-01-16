@@ -1623,6 +1623,8 @@ def _analyze_audio(
         global_metrics_dict["peak_dbfs"] = global_metrics.peak_dbfs
     if global_metrics.rms_dbfs is not None:
         global_metrics_dict["rms_dbfs"] = global_metrics.rms_dbfs
+    if global_metrics.lufs_i is not None:
+        global_metrics_dict["lufs_i"] = global_metrics.lufs_i
     if global_metrics.noise_floor_dbfs is not None:
         global_metrics_dict["noise_floor_dbfs"] = global_metrics.noise_floor_dbfs
     if global_metrics.crest_factor_db is not None:

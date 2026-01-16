@@ -90,9 +90,11 @@ def validate_reference_profile_dict(j: dict) -> None:
     tilt = rules.get("tilt", {})
     tonal_peak = rules.get("tonal_peak", {})
     peak_dbfs = rules.get("peak_dbfs", {})
+    true_peak_dbtp = rules.get("true_peak_dbtp", {})
     rms_dbfs = rules.get("rms_dbfs", {})
     noise_floor_dbfs = rules.get("noise_floor_dbfs", {})
     crest_factor_db = rules.get("crest_factor_db", {})
+    lufs_i = rules.get("lufs_i", {})
     loudness_range = rules.get("loudness_range", {})
     dynamic_range_db = rules.get("dynamic_range_db", {})
     dynamic_range_lu = rules.get("dynamic_range_lu", {})
@@ -108,8 +110,10 @@ def validate_reference_profile_dict(j: dict) -> None:
             err("threshold_model.rules.tonal_peak pass/warn must be numbers with warn>=pass.")
     for name, obj in (
         ("peak_dbfs", peak_dbfs),
+        ("true_peak_dbtp", true_peak_dbtp),
         ("rms_dbfs", rms_dbfs),
         ("noise_floor_dbfs", noise_floor_dbfs),
+        ("lufs_i", lufs_i),
         ("loudness_range", loudness_range),
     ):
         if not obj:

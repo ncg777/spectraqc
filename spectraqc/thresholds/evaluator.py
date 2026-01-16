@@ -264,6 +264,31 @@ def evaluate(
         if rms_stat == Status.FAIL:
             any_fail = True
 
+    if global_metrics.lufs_i is not None and "lufs_i" in thresholds:
+        lufs_pass, lufs_warn = thresholds["lufs_i"]
+        lufs_stat = _status_high_is_bad(float(global_metrics.lufs_i), lufs_pass, lufs_warn)
+        global_decisions.append(
+            ThresholdResult(
+                metric="lufs_i",
+                value=float(global_metrics.lufs_i),
+                units="LUFS",
+                status=lufs_stat,
+                pass_limit=lufs_pass,
+                warn_limit=lufs_warn,
+                notes=_explain(
+                    metric="lufs_i",
+                    value=float(global_metrics.lufs_i),
+                    units="LUFS",
+                    status=lufs_stat,
+                    pass_lim=lufs_pass,
+                    warn_lim=lufs_warn,
+                    compare="above"
+                )
+            )
+        )
+        if lufs_stat == Status.FAIL:
+            any_fail = True
+
     if global_metrics.noise_floor_dbfs is not None and "noise_floor_dbfs" in thresholds:
         noise_pass, noise_warn = thresholds["noise_floor_dbfs"]
         noise_stat = _status_high_is_bad(
