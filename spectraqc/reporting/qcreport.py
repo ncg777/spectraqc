@@ -145,6 +145,8 @@ def build_qcreport_dict(
         gm["rms_dbfs"] = q(float(gm["rms_dbfs"]), 0.01)
     if "crest_factor_db" in gm:
         gm["crest_factor_db"] = q(float(gm["crest_factor_db"]), 0.01)
+    if "lra_lu" in gm:
+        gm["lra_lu"] = q(float(gm["lra_lu"]), 0.01)
     if "tonal_peak_max_delta_db" in gm:
         gm["tonal_peak_max_delta_db"] = q(float(gm["tonal_peak_max_delta_db"]), 0.01)
     if "tonal_peaks" in gm:

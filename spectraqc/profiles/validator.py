@@ -92,6 +92,7 @@ def validate_reference_profile_dict(j: dict) -> None:
     peak_dbfs = rules.get("peak_dbfs", {})
     rms_dbfs = rules.get("rms_dbfs", {})
     crest_factor_db = rules.get("crest_factor_db", {})
+    loudness_range = rules.get("loudness_range", {})
     for name, obj in (("band_mean", band_mean), ("band_max", band_max), ("tilt", tilt)):
         p = obj.get("pass")
         w = obj.get("warn")
@@ -106,6 +107,7 @@ def validate_reference_profile_dict(j: dict) -> None:
         ("peak_dbfs", peak_dbfs),
         ("rms_dbfs", rms_dbfs),
         ("crest_factor_db", crest_factor_db),
+        ("loudness_range", loudness_range),
     ):
         if not obj:
             continue

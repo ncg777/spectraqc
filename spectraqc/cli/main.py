@@ -34,7 +34,7 @@ from spectraqc.metrics.levels import (
     rms_dbfs_mono,
     crest_factor_db_mono,
 )
-from spectraqc.metrics.loudness import integrated_lufs_mono
+from spectraqc.metrics.loudness import loudness_metrics_mono
 from spectraqc.dsp.repair import apply_repair_plan, compute_repair_metrics
 from spectraqc.algorithms.registry import (
     build_algorithm_registry,
@@ -1401,9 +1401,12 @@ def _analyze_audio(
         crest_factor_db = crest_factor_db_mono(analysis_buffer.samples)
 
         try:
-            lufs_i = integrated_lufs_mono(analysis_buffer.samples, analysis_buffer.fs)
+            lufs_i, lra_lu = loudness_metrics_mono(
+                analysis_buffer.samples, analysis_buffer.fs
+            )
         except Exception:
             lufs_i = None
+            lra_lu = None
 
         tonal_peaks = detect_tonal_peaks(
             profile.freqs_hz,
@@ -1424,6 +1427,7 @@ def _analyze_audio(
             rms_dbfs=rms_dbfs,
             crest_factor_db=crest_factor_db,
             lufs_i=lufs_i,
+            lra_lu=lra_lu,
             tonal_peak_max_delta_db=tonal_peak_max_delta,
         )
 
@@ -1479,6 +1483,7 @@ def _analyze_audio(
     spectral_flags = chosen.get("spectral_flags", [])
     tp_dbtp = global_metrics.true_peak_dbtp
     lufs_i = global_metrics.lufs_i
+    lra_lu = global_metrics.lra_lu
     analysis_buffer = chosen["analysis_buffer"]
     silence_ratio = chosen["silence_ratio"]
     effective_duration = chosen["effective_duration"]
@@ -1569,6 +1574,8 @@ def _analyze_audio(
         global_metrics_dict["rms_dbfs"] = global_metrics.rms_dbfs
     if global_metrics.crest_factor_db is not None:
         global_metrics_dict["crest_factor_db"] = global_metrics.crest_factor_db
+    if global_metrics.lra_lu is not None:
+        global_metrics_dict["lra_lu"] = global_metrics.lra_lu
     if global_metrics.tonal_peak_max_delta_db is not None:
         global_metrics_dict["tonal_peak_max_delta_db"] = global_metrics.tonal_peak_max_delta_db
     if tonal_peaks:

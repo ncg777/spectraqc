@@ -57,6 +57,7 @@ class GlobalMetrics:
     rms_dbfs: float | None = None
     crest_factor_db: float | None = None
     lufs_i: float | None = None
+    lra_lu: float | None = None
     tonal_peak_max_delta_db: float | None = None
 
 
