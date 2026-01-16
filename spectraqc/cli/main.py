@@ -1312,6 +1312,7 @@ def _build_input_meta(audio_path: str, audio, fs: float, duration: float) -> dic
         "decoded_pcm_hash_sha256": pcm_hash,
         "fs_hz": fs,
         "channels": int(audio.channels),
+        "bit_depth": audio.bit_depth,
         "duration_s": duration,
         "decode_backend": audio.backend,
         "decode_warnings": list(audio.warnings),
@@ -1570,6 +1571,7 @@ def _analyze_audio(
             duration=resampled_samples.size / resampled_fs if resampled_fs > 0 else 0.0,
             channels=mono_audio.channels,
             backend=mono_audio.backend,
+            bit_depth=mono_audio.bit_depth,
             warnings=list(mono_audio.warnings)
         )
 
@@ -2087,9 +2089,24 @@ def _analyze_audio(
     )
     
     # Build final report
+    input_meta = _build_input_meta(audio_path, audio, audio.fs, audio.duration)
+    metadata_checks = [
+        check
+        for check in input_policy_result.get("checks", [])
+        if str(check.get("rule", "")).startswith("required_metadata.")
+    ]
+    metadata_status = Status.PASS
+    if any(check.get("status") == Status.FAIL.value for check in metadata_checks):
+        metadata_status = Status.FAIL
+    input_meta["metadata_validation"] = {
+        "status": metadata_status.value,
+        "checks": metadata_checks,
+        "applied": bool(metadata_checks),
+    }
+
     qcreport = build_qcreport_dict(
         engine=_build_engine_meta(),
-        input_meta=_build_input_meta(audio_path, audio, audio.fs, audio.duration),
+        input_meta=input_meta,
         profile=profile_meta,
         analysis=analysis_cfg,
         freqs_hz=profile.freqs_hz,

@@ -202,6 +202,7 @@ def build_reference_profile(
             "duration_s": {"min": 0.1},
             "decode_backends": ["soundfile", "ffmpeg"],
             "warn_on_decode_warnings": True,
+            "required_metadata": ["sample_rate_hz", "bit_depth", "channels"],
         },
         "corpus_stats": {
             "file_count": int(len(ref_audio_paths)),

@@ -1,6 +1,7 @@
 """Audio I/O module."""
 from __future__ import annotations
 import json
+import re
 import shutil
 import subprocess
 import warnings as py_warnings
@@ -30,7 +31,21 @@ def _normalize_channels(
     return np.mean(x, axis=1), 1
 
 
-def _decode_soundfile(path: str) -> tuple[np.ndarray, float, list[str]]:
+def _infer_bit_depth_from_text(text: str | None) -> int | None:
+    if not text:
+        return None
+    match = re.search(r"(\d{1,2})", text)
+    if match:
+        return int(match.group(1))
+    normalized = text.lower()
+    if "float" in normalized:
+        return 32
+    if "double" in normalized:
+        return 64
+    return None
+
+
+def _decode_soundfile(path: str) -> tuple[np.ndarray, float, list[str], int | None]:
     """Decode using soundfile (libsndfile)."""
     try:
         import soundfile as sf
@@ -41,19 +56,47 @@ def _decode_soundfile(path: str) -> tuple[np.ndarray, float, list[str]]:
         py_warnings.simplefilter("always")
         data, fs = sf.read(path, always_2d=True, dtype="float64")
     warn_list = [str(wi.message) for wi in w]
+    bit_depth = None
     try:
         info = sf.info(path)
         if info.frames == 0:
             warn_list.append("soundfile: file reports zero frames.")
         elif info.frames > 0 and data.shape[0] < info.frames:
             warn_list.append("soundfile: decoded fewer frames than file reports.")
+        if getattr(info, "bits", None):
+            bit_depth = int(info.bits)
+        if bit_depth is None:
+            bit_depth = _infer_bit_depth_from_text(getattr(info, "subtype", None))
+        if bit_depth is None:
+            bit_depth = _infer_bit_depth_from_text(getattr(info, "subtype_info", None))
     except Exception:
         pass
-    return data, float(fs), warn_list
+    return data, float(fs), warn_list, bit_depth
 
 
-def _ffprobe_info(path: str) -> tuple[int, int]:
-    """Return (sample_rate, channels) from ffprobe."""
+def _parse_ffprobe_bit_depth(stream: dict) -> int | None:
+    bits = stream.get("bits_per_sample")
+    if bits is not None:
+        try:
+            bits_int = int(bits)
+            if bits_int > 0:
+                return bits_int
+        except (TypeError, ValueError):
+            pass
+    sample_fmt = stream.get("sample_fmt")
+    if isinstance(sample_fmt, str):
+        match = re.search(r"(\d{1,2})", sample_fmt)
+        if match:
+            return int(match.group(1))
+        if sample_fmt.startswith("flt"):
+            return 32
+        if sample_fmt.startswith("dbl"):
+            return 64
+    return None
+
+
+def _ffprobe_info(path: str) -> tuple[int, int, int | None]:
+    """Return (sample_rate, channels, bit_depth) from ffprobe."""
     ffprobe = shutil.which("ffprobe")
     if not ffprobe:
         raise RuntimeError("ffprobe not found for ffmpeg backend.")
@@ -61,7 +104,7 @@ def _ffprobe_info(path: str) -> tuple[int, int]:
         ffprobe,
         "-v", "error",
         "-select_streams", "a:0",
-        "-show_entries", "stream=sample_rate,channels",
+        "-show_entries", "stream=sample_rate,channels,bits_per_sample,sample_fmt",
         "-of", "json",
         path,
     ]
@@ -75,15 +118,16 @@ def _ffprobe_info(path: str) -> tuple[int, int]:
     stream = streams[0]
     sr = int(stream["sample_rate"])
     ch = int(stream["channels"])
-    return sr, ch
+    bit_depth = _parse_ffprobe_bit_depth(stream)
+    return sr, ch, bit_depth
 
 
-def _decode_ffmpeg(path: str) -> tuple[np.ndarray, float, list[str]]:
+def _decode_ffmpeg(path: str) -> tuple[np.ndarray, float, list[str], int | None]:
     """Decode using ffmpeg to raw float32 PCM."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("ffmpeg backend not available.")
-    fs, ch = _ffprobe_info(path)
+    fs, ch, bit_depth = _ffprobe_info(path)
     cmd = [
         ffmpeg,
         "-v", "warning",
@@ -104,7 +148,7 @@ def _decode_ffmpeg(path: str) -> tuple[np.ndarray, float, list[str]]:
             warn_list.append("ffmpeg: trimmed partial frame at end of stream.")
             data = data[:n]
         data = data.reshape(-1, ch)
-    return data.astype(np.float64), float(fs), warn_list
+    return data.astype(np.float64), float(fs), warn_list, bit_depth
 
 
 def load_audio(path: str) -> AudioBuffer:
@@ -116,13 +160,14 @@ def load_audio(path: str) -> AudioBuffer:
     """
     warnings_list: list[str] = []
     backend = "soundfile"
+    bit_depth = None
     try:
-        data, fs, warn_list = _decode_soundfile(path)
+        data, fs, warn_list, bit_depth = _decode_soundfile(path)
         warnings_list.extend(warn_list)
     except Exception as exc:
         warnings_list.append(f"soundfile decode failed: {exc}")
         backend = "ffmpeg"
-        data, fs, warn_list = _decode_ffmpeg(path)
+        data, fs, warn_list, bit_depth = _decode_ffmpeg(path)
         warnings_list.extend(warn_list)
 
     data, channels = _normalize_channels(
@@ -137,6 +182,7 @@ def load_audio(path: str) -> AudioBuffer:
         duration=duration,
         channels=channels,
         backend=backend,
+        bit_depth=bit_depth,
         warnings=warnings_list
     )
 
@@ -154,6 +200,7 @@ def to_mono(audio: AudioBuffer) -> AudioBuffer:
         duration=audio.duration,
         channels=1,
         backend=audio.backend,
+        bit_depth=audio.bit_depth,
         warnings=warnings_list
     )
 
@@ -175,6 +222,7 @@ def _mono_from_stereo(
         duration=audio.duration,
         channels=1,
         backend=audio.backend,
+        bit_depth=audio.bit_depth,
         warnings=warnings_list
     )
 
@@ -197,6 +245,7 @@ def apply_channel_policy(audio: AudioBuffer, policy: str) -> list[AudioBuffer]:
             duration=audio.duration,
             channels=1,
             backend=audio.backend,
+            bit_depth=audio.bit_depth,
             warnings=list(audio.warnings)
         )
         right = AudioBuffer(
@@ -205,6 +254,7 @@ def apply_channel_policy(audio: AudioBuffer, policy: str) -> list[AudioBuffer]:
             duration=audio.duration,
             channels=1,
             backend=audio.backend,
+            bit_depth=audio.bit_depth,
             warnings=list(audio.warnings)
         )
         return [left, right]

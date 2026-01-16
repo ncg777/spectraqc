@@ -10,6 +10,7 @@
     "reference_curves",
     "bands",
     "analysis_lock",
+    "input_policy",
     "threshold_model",
     "integrity"
   ],
@@ -149,6 +150,48 @@
             }
           },
           "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "input_policy": {
+      "type": "object",
+      "properties": {
+        "accepted_formats": { "type": "array", "items": { "type": "string" } },
+        "sample_rate_hz": {
+          "type": "object",
+          "properties": {
+            "min": { "type": "number" },
+            "max": { "type": "number" },
+            "allowed": { "type": "array", "items": { "type": "number" } }
+          },
+          "additionalProperties": false
+        },
+        "channels": {
+          "type": "object",
+          "properties": {
+            "min": { "type": "integer" },
+            "max": { "type": "integer" },
+            "allowed": { "type": "array", "items": { "type": "integer" } }
+          },
+          "additionalProperties": false
+        },
+        "duration_s": {
+          "type": "object",
+          "properties": {
+            "min": { "type": "number" },
+            "max": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "decode_backends": { "type": "array", "items": { "type": "string" } },
+        "warn_on_decode_warnings": { "type": "boolean" },
+        "required_metadata": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["sample_rate_hz", "bit_depth", "channels", "duration_s", "decode_backend"]
+          }
         }
       },
       "additionalProperties": false

@@ -19,6 +19,7 @@ class AudioBuffer:
     duration: float
     channels: int
     backend: str
+    bit_depth: int | None = None
     warnings: list[str] = field(default_factory=list)
 
 

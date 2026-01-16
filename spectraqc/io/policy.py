@@ -13,6 +13,24 @@ def _to_lower_list(values: Any) -> list[str]:
     return [str(v).strip().lower() for v in values if str(v).strip()]
 
 
+def _normalize_required_fields(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        value = value.get("fields")
+    if not isinstance(value, list):
+        return []
+    return [str(v).strip() for v in value if str(v).strip()]
+
+
+def _is_valid_metadata_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value > 0
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
+
+
 def _append_check(checks: list[dict], *, rule: str, status: Status, expected: Any, actual: Any, notes: str = "") -> None:
     checks.append(
         {
@@ -33,6 +51,14 @@ def evaluate_input_policy(policy: dict | None, *, audio: AudioBuffer, audio_path
     fs_hz = float(audio.fs)
     channels = int(audio.channels)
     duration = float(audio.duration)
+    bit_depth = audio.bit_depth
+    metadata = {
+        "sample_rate_hz": fs_hz,
+        "channels": channels,
+        "duration_s": duration,
+        "bit_depth": bit_depth,
+        "decode_backend": audio.backend,
+    }
 
     accepted_formats = _to_lower_list(policy_cfg.get("accepted_formats"))
     if accepted_formats:
@@ -138,6 +164,20 @@ def evaluate_input_policy(policy: dict | None, *, audio: AudioBuffer, audio_path
             expected="no warnings",
             actual=len(audio.warnings),
             notes="decode_warnings_present" if audio.warnings else "",
+        )
+
+    required_fields = _normalize_required_fields(policy_cfg.get("required_metadata"))
+    for field in required_fields:
+        value = metadata.get(field)
+        is_valid = _is_valid_metadata_value(value)
+        status = Status.PASS if is_valid else Status.FAIL
+        _append_check(
+            checks,
+            rule=f"required_metadata.{field}",
+            status=status,
+            expected="present",
+            actual=value,
+            notes="" if is_valid else "missing_or_invalid",
         )
 
     overall = Status.PASS

@@ -89,6 +89,7 @@ def compute_deviation_curve(
         duration=x.size / fs if fs > 0 else 0.0,
         channels=1,
         backend="repair",
+        bit_depth=None,
         warnings=[]
     )
     ltpsd = compute_ltpsd(buffer, nfft=nfft, hop=hop)
