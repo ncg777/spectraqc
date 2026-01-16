@@ -16,6 +16,8 @@ def build_qcreport_dict(
     profile: dict,
     analysis: dict,
     freqs_hz: np.ndarray,
+    ref_mean_db: np.ndarray,
+    ref_var_db2: np.ndarray,
     ltpsd_mean_db: np.ndarray,
     ltpsd_var_db2: np.ndarray,
     delta_mean_db: np.ndarray,
@@ -66,6 +68,10 @@ def build_qcreport_dict(
                 "mean_db": _tolist(ltpsd_mean_db),
                 "var_db2": _tolist(ltpsd_var_db2)
             },
+            "reference": {
+                "mean_db": _tolist(ref_mean_db),
+                "var_db2": _tolist(ref_var_db2),
+            },
             "deviation": {
                 "delta_mean_db": _tolist(delta_mean_db)
             },
@@ -113,6 +119,12 @@ def build_qcreport_dict(
     )
     report["metrics"]["ltpsd"]["var_db2"] = q_list(
         report["metrics"]["ltpsd"]["var_db2"], 0.001
+    )
+    report["metrics"]["reference"]["mean_db"] = q_list(
+        report["metrics"]["reference"]["mean_db"], 0.01
+    )
+    report["metrics"]["reference"]["var_db2"] = q_list(
+        report["metrics"]["reference"]["var_db2"], 0.001
     )
 
     for bm in report["metrics"]["band_metrics"]:

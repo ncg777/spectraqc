@@ -1,6 +1,6 @@
 [project]
 name = "spectraqc"
-version = "0.1.0"
+version = "1.0.0"
 description = "Spectral QC tool (V1 CLI)"
 requires-python = ">=3.11"
 dependencies = [

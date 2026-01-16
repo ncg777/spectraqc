@@ -904,6 +904,82 @@ def _render_qcreport_viewer_section(
         "  wrapper.appendChild(expand);"
         "  container.appendChild(wrapper);"
         "}"
+        "function renderMultiLineChart(container,title,xs,series,units,useLog){"
+        "  if(!xs.length||!series.length) return;"
+        "  const wrapper=document.createElement('div');"
+        "  wrapper.className='viewer-chart';"
+        "  const h=document.createElement('h3');"
+        "  h.textContent=title;"
+        "  wrapper.appendChild(h);"
+        "  const canvas=document.createElement('canvas');"
+        "  canvas.width=560; canvas.height=260;"
+        "  wrapper.appendChild(canvas);"
+        "  const ctx=canvas.getContext('2d');"
+        "  const padding={top:24,right:16,bottom:56,left:64};"
+        "  const w=canvas.width-padding.left-padding.right;"
+        "  const hgt=canvas.height-padding.top-padding.bottom;"
+        "  const allValues=series.flatMap(s=>s.values||[]);"
+        "  if(!allValues.length) return;"
+        "  const minY=Math.min(...allValues);"
+        "  const maxY=Math.max(...allValues);"
+        "  const yRange=(maxY-minY)||1;"
+        "  const xsLog=useLog?xs.map(x=>Math.log10(x)):xs;"
+        "  const minX=Math.min(...xsLog);"
+        "  const maxX=Math.max(...xsLog);"
+        "  const xRange=(maxX-minX)||1;"
+        "  ctx.clearRect(0,0,canvas.width,canvas.height);"
+        "  ctx.strokeStyle='#ccc'; ctx.lineWidth=1;"
+        "  ctx.beginPath(); ctx.moveTo(padding.left,padding.top); ctx.lineTo(padding.left,padding.top+hgt); ctx.stroke();"
+        "  ctx.beginPath(); ctx.moveTo(padding.left,padding.top+hgt); ctx.lineTo(padding.left+w,padding.top+hgt); ctx.stroke();"
+        "  const yTicks=niceTicks(minY,maxY,{log:false,target:6});"
+        "  ctx.fillStyle='#666'; ctx.font='12px Arial,Helvetica,sans-serif';"
+        "  yTicks.forEach((t)=>{"
+        "    const y=padding.top+((maxY-t)/yRange)*hgt;"
+        "    ctx.strokeStyle='#e0e0e0'; ctx.beginPath(); ctx.moveTo(padding.left,y); ctx.lineTo(padding.left+w,y); ctx.stroke();"
+        "    ctx.strokeStyle='#888'; ctx.beginPath(); ctx.moveTo(padding.left-4,y); ctx.lineTo(padding.left,y); ctx.stroke();"
+        "    const label=formatNumber(t)+(units?` ${units}`:'');"
+        "    ctx.fillText(label,4,y+4);"
+        "  });"
+        "  series.forEach((s,idx)=>{"
+        "    const color=s.color||['#1e88e5','#8e24aa','#43a047'][idx%3];"
+        "    ctx.strokeStyle=color; ctx.lineWidth=1.5;"
+        "    ctx.beginPath();"
+        "    s.values.forEach((v,i)=>{"
+        "      const xVal=xsLog[i];"
+        "      if(!Number.isFinite(v)||!Number.isFinite(xVal)) return;"
+        "      const x=padding.left+((xVal-minX)/xRange)*w;"
+        "      const y=padding.top+((maxY-v)/yRange)*hgt;"
+        "      if(i===0){ctx.moveTo(x,y);}else{ctx.lineTo(x,y);}"
+        "    });"
+        "    ctx.stroke();"
+        "  });"
+        "  const xAxisLabel=useLog?'Frequency (Hz, log scale)':'Frequency (Hz)';"
+        "  const yAxisLabel=units?`Value (${units})`:'Value';"
+        "  ctx.fillStyle='#555'; ctx.font='13px Arial,Helvetica,sans-serif';"
+        "  ctx.textAlign='center';"
+        "  ctx.fillText(xAxisLabel,padding.left+(w/2),canvas.height-10);"
+        "  ctx.save();"
+        "  ctx.translate(16,padding.top+(hgt/2));"
+        "  ctx.rotate(-Math.PI/2);"
+        "  ctx.fillText(yAxisLabel,0,0);"
+        "  ctx.restore();"
+        "  const legend=document.createElement('div');"
+        "  legend.className='viewer-note';"
+        "  legend.innerHTML=series.map((s,idx)=>{"
+        "    const color=s.color||['#1e88e5','#8e24aa','#43a047'][idx%3];"
+        "    return `<span style=\"display:inline-flex;align-items:center;margin-right:8px;\">"
+        "      <span style=\"width:10px;height:10px;background:${color};display:inline-block;margin-right:4px;border-radius:2px;\"></span>"
+        "      ${escapeHtml(s.label||'series')}</span>`;"
+        "  }).join('');"
+        "  const expand=document.createElement('button');"
+        "  expand.className='viewer-expand';"
+        "  expand.type='button';"
+        "  expand.textContent='Full screen';"
+        "  expand.addEventListener('click',()=>openOverlayFromCanvas(canvas,title));"
+        "  wrapper.appendChild(legend);"
+        "  wrapper.appendChild(expand);"
+        "  container.appendChild(wrapper);"
+        "}"
         "function renderLineChart(container,title,xs,ys,units,useLog){"
         "  const points=[];"
         "  const n=Math.min(xs.length,ys.length);"
@@ -1036,8 +1112,20 @@ def _render_qcreport_viewer_section(
         "  const grid=metrics.frequency_grid?.freqs_hz||[];"
         "  const ltpsd=metrics.ltpsd?.mean_db||[];"
         "  const deviation=metrics.deviation?.delta_mean_db||[];"
-        "  if(grid.length && ltpsd.length){"
+        "  const reference=metrics.reference||{};"
+        "  const refMean=reference.mean_db||[];"
+        "  const refVar=reference.var_db2||[];"
+        "  if(grid.length && ltpsd.length && refMean.length){"
+        "    renderMultiLineChart(charts,'Reference vs Input Mean',grid,["
+        "      {label:'Input',values:ltpsd,color:'#1e88e5'},"
+        "      {label:'Reference',values:refMean,color:'#8e24aa'}"
+        "    ],'dB',true);"
+        "  }"
+        "  if(grid.length && ltpsd.length && !refMean.length){"
         "    renderLineChart(charts,'LTPSD Mean',grid,ltpsd,'dB',true);"
+        "  }"
+        "  if(grid.length && refVar.length){"
+        "    renderLineChart(charts,'Reference Variance',grid,refVar,'dB²',true);"
         "  }"
         "  if(grid.length && deviation.length){"
         "    renderLineChart(charts,'Deviation Curve',grid,deviation,'dB',true);"
@@ -1497,6 +1585,8 @@ def _analyze_audio(
         profile=profile_meta,
         analysis=analysis_cfg,
         freqs_hz=profile.freqs_hz,
+        ref_mean_db=profile.ref_mean_db,
+        ref_var_db2=profile.thresholds.get("_ref_var_db2", np.ones_like(profile.freqs_hz)),
         ltpsd_mean_db=input_mean_db,
         ltpsd_var_db2=input_var_db2,
         delta_mean_db=delta_db,
@@ -1718,6 +1808,45 @@ def cmd_inspect_ref(args) -> int:
         return EXIT_PROFILE_ERROR
     except Exception as e:
         print(f"Internal error: {e}", file=sys.stderr)
+        return EXIT_INTERNAL_ERROR
+
+
+def cmd_build_profile(args) -> int:
+    """Handle build-profile command."""
+    try:
+        from spectraqc.profiles.builder import (
+            build_reference_profile_from_folder,
+            build_reference_profile_from_manifest,
+        )
+
+        if bool(args.manifest) == bool(args.folder):
+            print("Error: provide exactly one of --manifest or --folder.", file=sys.stderr)
+            return EXIT_BAD_ARGS
+
+        if args.manifest:
+            profile, output_path = build_reference_profile_from_manifest(
+                args.manifest,
+                profile_name=args.name,
+                profile_kind=args.kind,
+                output_path=args.out,
+            )
+        else:
+            profile, output_path = build_reference_profile_from_folder(
+                args.folder,
+                recursive=args.recursive,
+                profile_name=args.name,
+                profile_kind=args.kind,
+                output_path=args.out,
+            )
+
+        print(f"Profile written to: {output_path}")
+        print(f"Profile name: {profile['profile']['name']}")
+        print(f"Profile kind: {profile['profile']['kind']}")
+        print(f"Profile version: {profile['profile']['version']}")
+        print(f"Files used: {profile['corpus_stats']['file_count']}")
+        return EXIT_PASS
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
         return EXIT_INTERNAL_ERROR
 
 
@@ -2023,6 +2152,40 @@ def main():
         help="Path to reference profile JSON"
     )
     inspect_parser.set_defaults(func=cmd_inspect_ref)
+
+    # build-profile command
+    build_parser = subparsers.add_parser(
+        "build-profile",
+        help="Build a reference profile from a manifest or folder"
+    )
+    build_parser.add_argument(
+        "--manifest",
+        help="Corpus manifest JSON path"
+    )
+    build_parser.add_argument(
+        "--folder",
+        help="Folder containing reference audio"
+    )
+    build_parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recurse into subfolders when using --folder"
+    )
+    build_parser.add_argument(
+        "--out",
+        help="Output path for the profile JSON"
+    )
+    build_parser.add_argument(
+        "--name",
+        default="streaming_generic_v1",
+        help="Profile name"
+    )
+    build_parser.add_argument(
+        "--kind",
+        default="streaming",
+        help="Profile kind (broadcast, streaming, archive, custom)"
+    )
+    build_parser.set_defaults(func=cmd_build_profile)
 
     # batch command
     batch_parser = subparsers.add_parser(

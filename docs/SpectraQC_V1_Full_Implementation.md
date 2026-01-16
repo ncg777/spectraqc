@@ -420,7 +420,7 @@ Before hashing:
 ```toml
 [project]
 name = "spectraqc"
-version = "0.1.0"
+version = "1.0.0"
 description = "Spectral QC tool (V1 CLI)"
 requires-python = ">=3.11"
 dependencies = [
@@ -434,7 +434,7 @@ spectraqc = "spectraqc.cli.main:main"
 
 ## 5.2 spectraqc/version.py
 ```python
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 ```
 
 ## 5.3 spectraqc/types.py

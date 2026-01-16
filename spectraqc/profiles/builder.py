@@ -18,6 +18,8 @@ from spectraqc.io.audio import load_audio_mono
 from spectraqc.metrics.smoothing import smooth_octave_fraction
 from spectraqc.utils.hashing import sha256_hex_canonical_json
 
+SUPPORTED_AUDIO_EXTS = {".wav", ".flac", ".aiff", ".aif", ".mp3"}
+
 
 def build_reference_profile(
     ref_audio_paths: list[str],
@@ -196,6 +198,39 @@ def build_reference_profile_from_manifest(
 
     if not ref_paths:
         raise ValueError("No usable entries in manifest.")
+
+    profile = build_reference_profile(
+        ref_paths,
+        profile_name=profile_name,
+        profile_kind=profile_kind,
+    )
+
+    base_dir = Path(__file__).parent.parent.parent
+    profiles_dir = base_dir / "validation" / "profiles"
+    profiles_dir.mkdir(parents=True, exist_ok=True)
+    resolved_output = Path(output_path) if output_path else profiles_dir / f"{profile_name}.ref.json"
+    resolved_output.parent.mkdir(parents=True, exist_ok=True)
+    resolved_output.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+
+    return profile, resolved_output
+
+
+def build_reference_profile_from_folder(
+    folder: str,
+    *,
+    recursive: bool,
+    profile_name: str,
+    profile_kind: str,
+    output_path: str | None = None,
+) -> tuple[dict, Path]:
+    """Build and write a reference profile from a folder of audio files."""
+    folder_path = Path(folder)
+    if not folder_path.exists():
+        raise ValueError(f"Folder not found: {folder_path}")
+    files = folder_path.rglob("*") if recursive else folder_path.glob("*")
+    ref_paths = [str(p) for p in files if p.is_file() and p.suffix.lower() in SUPPORTED_AUDIO_EXTS]
+    if not ref_paths:
+        raise ValueError("No supported audio files found in folder.")
 
     profile = build_reference_profile(
         ref_paths,

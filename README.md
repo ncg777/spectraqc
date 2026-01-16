@@ -296,6 +296,36 @@ Arguments and options:
   - Spec: path to the reference profile JSON.
   - Usefulness: selects the profile to inspect.
 
+### `spectraqc build-profile`
+- Purpose: build a reference profile from a manifest or folder.
+- Usefulness: creates new reference profiles without manual manifests when a folder scan is enough.
+
+Usage:
+```
+spectraqc build-profile --manifest <manifest.json> [options]
+spectraqc build-profile --folder <audio_dir> [options]
+```
+
+Arguments and options:
+- `--manifest`
+  - Spec: corpus manifest JSON path.
+  - Usefulness: uses a curated input list with exclusions.
+- `--folder`
+  - Spec: folder containing reference audio files.
+  - Usefulness: quick profile creation without a manifest.
+- `--recursive`
+  - Spec: recurse into subfolders when using `--folder`.
+  - Usefulness: supports nested reference corpora.
+- `--out`
+  - Spec: output path for the profile JSON.
+  - Usefulness: stores generated profiles in a chosen location.
+- `--name` (default: `streaming_generic_v1`)
+  - Spec: profile name.
+  - Usefulness: identifies the profile in reports and audits.
+- `--kind` (default: `streaming`)
+  - Spec: profile kind (`broadcast`, `streaming`, `archive`, `custom`).
+  - Usefulness: describes the intended program domain.
+
 ### `spectraqc batch`
 - Purpose: analyze a folder or corpus manifest in parallel.
 - Usefulness: enables corpus-scale QC and aggregate reporting.

@@ -66,6 +66,27 @@ Options:
 Outputs:
 - Profile metadata, bands, and thresholds
 
+## Command: `build-profile`
+
+Purpose: build a reference profile from a manifest or folder.
+
+```bash
+spectraqc build-profile --manifest <manifest.json> [options]
+spectraqc build-profile --folder <audio_dir> [options]
+```
+
+Options:
+- `--manifest`: corpus manifest JSON path
+- `--folder`: folder containing reference audio files
+- `--recursive`: scan subfolders when using `--folder`
+- `--out`: output path for the profile JSON
+- `--name`: profile name (default: `streaming_generic_v1`)
+- `--kind`: profile kind (`broadcast`, `streaming`, `archive`, `custom`)
+
+Outputs:
+- Reference profile JSON written to disk
+- Summary of profile metadata to stdout
+
 ## Command: `batch`
 
 Purpose: analyze a folder or manifest in parallel and produce batch summaries.
