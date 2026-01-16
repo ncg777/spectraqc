@@ -68,6 +68,18 @@
         "additionalProperties": false
       }
     },
+    "noise_floor_baselines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["band_name", "noise_floor_db"],
+        "properties": {
+          "band_name": { "type": "string" },
+          "noise_floor_db": { "type": "number" }
+        },
+        "additionalProperties": false
+      }
+    },
     "analysis_lock": {
       "type": "object",
       "required": ["fft_size", "hop_size", "window", "psd_estimator", "smoothing", "normalization"],
@@ -184,6 +196,15 @@
               "additionalProperties": false
             },
             "tilt": {
+              "type": "object",
+              "required": ["pass", "warn"],
+              "properties": {
+                "pass": { "type": "number" },
+                "warn": { "type": "number" }
+              },
+              "additionalProperties": false
+            },
+            "tonal_peak": {
               "type": "object",
               "required": ["pass", "warn"],
               "properties": {

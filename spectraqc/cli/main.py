@@ -27,6 +27,7 @@ from spectraqc.metrics.deviation import deviation_curve_db
 from spectraqc.metrics.integration import band_metrics
 from spectraqc.metrics.tilt import spectral_tilt_db_per_oct
 from spectraqc.metrics.brickwall import detect_spectral_artifacts
+from spectraqc.metrics.tonal import detect_tonal_peaks
 from spectraqc.metrics.truepeak import true_peak_dbtp_mono
 from spectraqc.metrics.loudness import integrated_lufs_mono
 from spectraqc.dsp.repair import apply_repair_plan, compute_repair_metrics
@@ -1367,6 +1368,7 @@ def _analyze_audio(
         ltpsd = compute_ltpsd(analysis_buffer, nfft=nfft, hop=hop)
         input_mean_db = interp_to_grid(ltpsd.freqs, ltpsd.mean_db, profile.freqs_hz)
         input_var_db2 = interp_var_ratio(ltpsd.freqs, ltpsd.var_db2, profile.freqs_hz)
+        input_mean_db_raw = np.array(input_mean_db, dtype=np.float64)
 
         if smoothing_cfg.get("type") == "octave_fraction":
             oct_frac = smoothing_cfg.get("octave_fraction", 1/6)
@@ -1395,11 +1397,23 @@ def _analyze_audio(
         except Exception:
             lufs_i = None
 
+        tonal_peaks = detect_tonal_peaks(
+            profile.freqs_hz,
+            input_mean_db_raw,
+            bands=profile.bands,
+            noise_floor_by_band=profile.noise_floor_by_band,
+        )
+        tonal_peak_max_delta = None
+        tonal_deltas = [p.get("delta_db") for p in tonal_peaks if p.get("delta_db") is not None]
+        if tonal_deltas:
+            tonal_peak_max_delta = float(np.max(tonal_deltas))
+
         global_metrics = GlobalMetrics(
             spectral_tilt_db_per_oct=input_tilt,
             tilt_deviation_db_per_oct=tilt_dev,
             true_peak_dbtp=tp_dbtp,
-            lufs_i=lufs_i
+            lufs_i=lufs_i,
+            tonal_peak_max_delta_db=tonal_peak_max_delta,
         )
 
         spectral_artifacts = detect_spectral_artifacts(
@@ -1426,6 +1440,7 @@ def _analyze_audio(
             "delta_db": delta_db,
             "band_metrics": bm,
             "global_metrics": global_metrics,
+            "tonal_peaks": tonal_peaks,
             "decision": decision,
             "spectral_artifacts": spectral_artifacts,
             "spectral_flags": spectral_flags
@@ -1447,6 +1462,7 @@ def _analyze_audio(
     delta_db = chosen["delta_db"]
     bm = chosen["band_metrics"]
     global_metrics = chosen["global_metrics"]
+    tonal_peaks = chosen.get("tonal_peaks", [])
     decision = chosen["decision"]
     spectral_artifacts = chosen.get("spectral_artifacts", {})
     spectral_flags = chosen.get("spectral_flags", [])
@@ -1536,6 +1552,10 @@ def _analyze_audio(
     }
     if global_metrics.true_peak_dbtp is not None:
         global_metrics_dict["true_peak_dbtp"] = global_metrics.true_peak_dbtp
+    if global_metrics.tonal_peak_max_delta_db is not None:
+        global_metrics_dict["tonal_peak_max_delta_db"] = global_metrics.tonal_peak_max_delta_db
+    if tonal_peaks:
+        global_metrics_dict["tonal_peaks"] = tonal_peaks
     if spectral_artifacts:
         global_metrics_dict["spectral_artifacts"] = spectral_artifacts
     

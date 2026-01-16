@@ -4,6 +4,7 @@ import numpy as np
 from spectraqc.types import ReferenceProfile, FrequencyBand
 from spectraqc.thresholds.brickwall import build_spectral_artifact_config
 from spectraqc.profiles.validator import validate_reference_profile_dict
+from spectraqc.metrics.tonal import derive_noise_floor_baselines
 
 
 def load_reference_profile(path: str) -> ReferenceProfile:
@@ -76,11 +77,28 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         ),
     }
 
+    tonal_rules = tm.get("tonal_peak")
+    if tonal_rules:
+        thresholds["tonal_peak_delta_db"] = (
+            float(tonal_rules["pass"]),
+            float(tonal_rules["warn"]),
+        )
+
     # True peak threshold if enabled
     tp = normalization.get("true_peak", {})
     if bool(tp.get("enabled", False)):
         max_dbtp = float(tp.get("max_dbtp", -1.0))
         thresholds["true_peak_dbtp"] = (max_dbtp, max_dbtp + 0.5)
+
+    noise_floor_defaults = derive_noise_floor_baselines(freqs, ref_mean, bands)
+    noise_floor_baselines = {
+        entry["band_name"]: float(entry["noise_floor_db"])
+        for entry in j.get("noise_floor_baselines", [])
+        if isinstance(entry, dict)
+        and "band_name" in entry
+        and "noise_floor_db" in entry
+    }
+    noise_floor_by_band = {**noise_floor_defaults, **noise_floor_baselines}
 
     algorithm_registry = j.get("algorithm_registry", {})
 
@@ -98,4 +116,5 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         analysis_lock=analysis_lock,
         algorithm_registry=algorithm_registry,
         normalization=normalization,
+        noise_floor_by_band=noise_floor_by_band,
     )

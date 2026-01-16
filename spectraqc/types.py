@@ -54,6 +54,7 @@ class GlobalMetrics:
     tilt_deviation_db_per_oct: float
     true_peak_dbtp: float | None = None
     lufs_i: float | None = None
+    tonal_peak_max_delta_db: float | None = None
 
 
 @dataclass(frozen=True)
@@ -101,3 +102,4 @@ class ReferenceProfile:
     analysis_lock: dict
     algorithm_registry: dict
     normalization: dict  # policy-driven: loudness + true peak
+    noise_floor_by_band: dict[str, float] = field(default_factory=dict)

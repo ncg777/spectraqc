@@ -6333,6 +6333,10 @@
       "tilt": {
         "pass": 0.5,
         "warn": 1.0
+      },
+      "tonal_peak": {
+        "pass": 6.0,
+        "warn": 10.0
       }
     },
     "aggregation": {
@@ -6340,11 +6344,41 @@
     }
   },
   "integrity": {
-    "profile_hash_sha256": "332ac97be88c773a8fb22bae5643168c8f900970d750d1880ae201548b6ff514",
+    "profile_hash_sha256": "a2bfe64c15287319356971beadaa2e6b6c96b382fee222a38d7e19dd5c4d8461",
     "signed": false,
     "signature": {
       "algo": "none",
       "value_b64": ""
     }
-  }
+  },
+  "noise_floor_baselines": [
+    {
+      "band_name": "sub",
+      "noise_floor_db": -62.39717907353462
+    },
+    {
+      "band_name": "bass",
+      "noise_floor_db": -68.61002682395072
+    },
+    {
+      "band_name": "low_mid",
+      "noise_floor_db": -74.17402644541458
+    },
+    {
+      "band_name": "mid",
+      "noise_floor_db": -80.03648275659948
+    },
+    {
+      "band_name": "high_mid",
+      "noise_floor_db": -84.39569985951286
+    },
+    {
+      "band_name": "high",
+      "noise_floor_db": -87.47035653759183
+    },
+    {
+      "band_name": "air",
+      "noise_floor_db": -88.61928660052367
+    }
+  ]
 }

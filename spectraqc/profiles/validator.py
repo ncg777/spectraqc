@@ -88,11 +88,17 @@ def validate_reference_profile_dict(j: dict) -> None:
     band_mean = rules.get("band_mean", {}).get("default", {})
     band_max = rules.get("band_max", {}).get("default", {})
     tilt = rules.get("tilt", {})
+    tonal_peak = rules.get("tonal_peak", {})
     for name, obj in (("band_mean", band_mean), ("band_max", band_max), ("tilt", tilt)):
         p = obj.get("pass")
         w = obj.get("warn")
         if not _is_number(p) or not _is_number(w) or w < p:
             err(f"threshold_model.rules.{name} pass/warn must be numbers with warn>=pass.")
+    if tonal_peak:
+        p = tonal_peak.get("pass")
+        w = tonal_peak.get("warn")
+        if not _is_number(p) or not _is_number(w) or w < p:
+            err("threshold_model.rules.tonal_peak pass/warn must be numbers with warn>=pass.")
     spectral_artifacts = rules.get("spectral_artifacts", {})
     if spectral_artifacts:
         cutoff = spectral_artifacts.get("cutoff", {})
@@ -124,6 +130,23 @@ def validate_reference_profile_dict(j: dict) -> None:
             bname = bb.get("band_name")
             if bname not in valid_names:
                 err(f"threshold_model.rules.band_mean.by_band[{i}] has unknown band_name.")
+
+    noise_floor_baselines = j.get("noise_floor_baselines", [])
+    if noise_floor_baselines:
+        valid_names = {b.get("name") for b in bands if isinstance(b, dict)}
+        if not isinstance(noise_floor_baselines, list):
+            err("noise_floor_baselines must be a list.")
+        else:
+            for i, entry in enumerate(noise_floor_baselines):
+                if not isinstance(entry, dict):
+                    err(f"noise_floor_baselines[{i}] must be an object.")
+                    continue
+                bname = entry.get("band_name")
+                noise_floor_db = entry.get("noise_floor_db")
+                if bname not in valid_names:
+                    err(f"noise_floor_baselines[{i}].band_name must match a band name.")
+                if not _is_number(noise_floor_db):
+                    err(f"noise_floor_baselines[{i}].noise_floor_db must be a number.")
 
     agg = j.get("threshold_model", {}).get("aggregation", {})
     warn_count = agg.get("warn_if_warn_band_count_at_least")

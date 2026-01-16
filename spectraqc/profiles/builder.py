@@ -16,6 +16,7 @@ from spectraqc.algorithms.registry import (
 from spectraqc.corpus.manifest import load_corpus_manifest, validate_manifest_entry
 from spectraqc.io.audio import load_audio_mono
 from spectraqc.metrics.smoothing import smooth_octave_fraction
+from spectraqc.metrics.tonal import derive_noise_floor_baselines
 from spectraqc.utils.hashing import sha256_hex_canonical_json
 
 SUPPORTED_AUDIO_EXTS = {".wav", ".flac", ".aiff", ".aif", ".mp3"}
@@ -71,6 +72,7 @@ def build_reference_profile(
     octave_fraction = 1 / 6
 
     bands = default_streaming_bands()
+    noise_floor_baselines = derive_noise_floor_baselines(freqs, mean_db, bands)
     algorithm_registry = build_algorithm_registry(
         analysis_lock={
             "fft_size": nfft,
@@ -108,6 +110,10 @@ def build_reference_profile(
         },
         "bands": [
             {"name": b.name, "f_low_hz": b.f_low, "f_high_hz": b.f_high}
+            for b in bands
+        ],
+        "noise_floor_baselines": [
+            {"band_name": b.name, "noise_floor_db": noise_floor_baselines[b.name]}
             for b in bands
         ],
         "analysis_lock": {
@@ -159,6 +165,7 @@ def build_reference_profile(
                     "by_band": [],
                 },
                 "tilt": {"pass": 0.5, "warn": 1.0},
+                "tonal_peak": {"pass": 6.0, "warn": 10.0},
             },
             "aggregation": {
                 "warn_if_warn_band_count_at_least": 2,
