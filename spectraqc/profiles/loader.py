@@ -80,6 +80,7 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         "level_anomalies": build_level_anomaly_config(
             tm.get("level_anomalies")
         ),
+        "silence_detection": tm.get("silence_detection", {}),
     }
 
     peak_rules = tm.get("peak_dbfs") or DEFAULT_LEVEL_METRIC_THRESHOLDS.get("peak_dbfs")
