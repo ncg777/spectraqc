@@ -84,11 +84,12 @@ Batch outputs:
 The QCReport has these top-level sections:
 - `input`: file paths, hashes, and decode metadata
 - `analysis`: parameters and algorithm registry
-- `metrics`: LTPSD, deviation curve, band/global metrics
+- `metrics`: LTPSD, reference curves (when supplied), deviation curve, band/global metrics
 - `decisions`: PASS/WARN/FAIL outcomes
 - `confidence`: sanity checks and warnings
 - `integrity`: content hash
 
+When a reference profile is provided, the report includes `metrics.reference` with the target mean and variance curves used for comparisons.
 For detailed structure, see `docs/SpectraQC_V1_Full_Implementation.md`.
 
 ## 7) Profiles and Thresholds
@@ -155,4 +156,3 @@ The CLI renders HTML with an embedded report viewer. Use the steps below to manu
    - Verify zoom/pan controls still work in the overlay.
    - Confirm the zoom level matches the inline chart when you toggle full screen.
 5. Capture screenshots for any UI changes and attach them to review notes.
-

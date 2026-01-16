@@ -185,20 +185,54 @@ const ViewportMath = (function() {
     let xMax = Math.max(start.x, end.x);
     let yMin = Math.min(start.y, end.y);
     let yMax = Math.max(start.y, end.y);
-    if (xMax - xMin < minSpan.x) {
+    let xSpan = xMax - xMin;
+    let ySpan = yMax - yMin;
+    if (xSpan < minSpan.x) {
       const center = (xMin + xMax) / 2;
       xMin = center - minSpan.x / 2;
       xMax = center + minSpan.x / 2;
+      xSpan = minSpan.x;
     }
-    if (yMax - yMin < minSpan.y) {
+    if (ySpan < minSpan.y) {
       const center = (yMin + yMax) / 2;
       yMin = center - minSpan.y / 2;
       yMax = center + minSpan.y / 2;
+      ySpan = minSpan.y;
     }
-    xMin = clamp(xMin, bounds.xMin, bounds.xMax - minSpan.x);
-    xMax = clamp(xMax, bounds.xMin + minSpan.x, bounds.xMax);
-    yMin = clamp(yMin, bounds.yMin, bounds.yMax - minSpan.y);
-    yMax = clamp(yMax, bounds.yMin + minSpan.y, bounds.yMax);
+    if (xSpan > bounds.xMax - bounds.xMin) {
+      xMin = bounds.xMin;
+      xMax = bounds.xMax;
+    } else {
+      if (xMin < bounds.xMin) {
+        const shift = bounds.xMin - xMin;
+        xMin += shift;
+        xMax += shift;
+      }
+      if (xMax > bounds.xMax) {
+        const shift = xMax - bounds.xMax;
+        xMin -= shift;
+        xMax -= shift;
+      }
+      xMin = clamp(xMin, bounds.xMin, bounds.xMax - minSpan.x);
+      xMax = clamp(xMax, bounds.xMin + minSpan.x, bounds.xMax);
+    }
+    if (ySpan > bounds.yMax - bounds.yMin) {
+      yMin = bounds.yMin;
+      yMax = bounds.yMax;
+    } else {
+      if (yMin < bounds.yMin) {
+        const shift = bounds.yMin - yMin;
+        yMin += shift;
+        yMax += shift;
+      }
+      if (yMax > bounds.yMax) {
+        const shift = yMax - bounds.yMax;
+        yMin -= shift;
+        yMax -= shift;
+      }
+      yMin = clamp(yMin, bounds.yMin, bounds.yMax - minSpan.y);
+      yMax = clamp(yMax, bounds.yMin + minSpan.y, bounds.yMax);
+    }
     return { xMin, xMax, yMin, yMax };
   }
   return { zoomViewport, panViewport, viewportFromRect };

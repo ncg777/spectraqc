@@ -17,8 +17,8 @@ def build_qcreport_dict(
     profile: dict,
     analysis: dict,
     freqs_hz: np.ndarray,
-    ref_mean_db: np.ndarray,
-    ref_var_db2: np.ndarray,
+    ref_mean_db: np.ndarray | None = None,
+    ref_var_db2: np.ndarray | None = None,
     ltpsd_mean_db: np.ndarray,
     ltpsd_var_db2: np.ndarray,
     delta_mean_db: np.ndarray,
@@ -42,6 +42,8 @@ def build_qcreport_dict(
         profile: Profile metadata
         analysis: Analysis configuration
         freqs_hz: Frequency grid
+        ref_mean_db: Reference mean curve in dB (optional)
+        ref_var_db2: Reference variance curve in dB² (optional)
         ltpsd_mean_db: Long-term PSD mean in dB
         ltpsd_var_db2: Long-term PSD variance in dB²
         delta_mean_db: Deviation curve in dB
@@ -71,10 +73,6 @@ def build_qcreport_dict(
                 "mean_db": _tolist(ltpsd_mean_db),
                 "var_db2": _tolist(ltpsd_var_db2)
             },
-            "reference": {
-                "mean_db": _tolist(ref_mean_db),
-                "var_db2": _tolist(ref_var_db2),
-            },
             "deviation": {
                 "delta_mean_db": _tolist(delta_mean_db)
             },
@@ -102,6 +100,14 @@ def build_qcreport_dict(
 
     if noise_floor is not None:
         report["metrics"]["noise_floor"] = noise_floor
+
+    if ref_mean_db is not None:
+        if ref_var_db2 is None:
+            ref_var_db2 = np.ones_like(ref_mean_db)
+        report["metrics"]["reference"] = {
+            "mean_db": _tolist(ref_mean_db),
+            "var_db2": _tolist(ref_var_db2),
+        }
 
     cohort_meta = {
         "cohort_id": cohort_id,
@@ -133,12 +139,13 @@ def build_qcreport_dict(
     report["metrics"]["ltpsd"]["var_db2"] = q_list(
         report["metrics"]["ltpsd"]["var_db2"], 0.001
     )
-    report["metrics"]["reference"]["mean_db"] = q_list(
-        report["metrics"]["reference"]["mean_db"], 0.01
-    )
-    report["metrics"]["reference"]["var_db2"] = q_list(
-        report["metrics"]["reference"]["var_db2"], 0.001
-    )
+    if "reference" in report["metrics"]:
+        report["metrics"]["reference"]["mean_db"] = q_list(
+            report["metrics"]["reference"]["mean_db"], 0.01
+        )
+        report["metrics"]["reference"]["var_db2"] = q_list(
+            report["metrics"]["reference"]["var_db2"], 0.001
+        )
 
     for bm in report["metrics"]["band_metrics"]:
         bm["mean_deviation_db"] = q(float(bm["mean_deviation_db"]), 0.01)

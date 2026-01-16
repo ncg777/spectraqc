@@ -65,7 +65,7 @@ Outputs:
 
 - `input`: hashes, decode metadata
 - `analysis`: locked parameters + algorithm registry
-- `metrics`: LTPSD, deviation, band/global metrics
+- `metrics`: LTPSD, reference curves (when supplied), deviation, band/global metrics
 - `decisions`: PASS/WARN/FAIL results
 - `confidence`: warnings for short/silent content
 - `integrity`: report hash
