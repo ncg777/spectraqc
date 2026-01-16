@@ -211,6 +211,16 @@ def build_qcreport_dict(
             silence["silence_ratio"] = q(float(silence["silence_ratio"]), 0.0001)
         if "longest_silence_s" in silence:
             silence["longest_silence_s"] = q(float(silence["longest_silence_s"]), 0.001)
+        if "leading_silence_s" in silence:
+            silence["leading_silence_s"] = q(float(silence["leading_silence_s"]), 0.001)
+        if "trailing_silence_s" in silence:
+            silence["trailing_silence_s"] = q(float(silence["trailing_silence_s"]), 0.001)
+        if "content_start_s" in silence:
+            silence["content_start_s"] = q(float(silence["content_start_s"]), 0.001)
+        if "content_end_s" in silence:
+            silence["content_end_s"] = q(float(silence["content_end_s"]), 0.001)
+        if "content_duration_s" in silence:
+            silence["content_duration_s"] = q(float(silence["content_duration_s"]), 0.001)
         for seg in silence.get("segments", []):
             if "start_s" in seg:
                 seg["start_s"] = q(float(seg["start_s"]), 0.001)
@@ -218,6 +228,19 @@ def build_qcreport_dict(
                 seg["end_s"] = q(float(seg["end_s"]), 0.001)
             if "duration_s" in seg:
                 seg["duration_s"] = q(float(seg["duration_s"]), 0.001)
+        gaps = silence.get("gaps")
+        if gaps:
+            if "total_duration_s" in gaps:
+                gaps["total_duration_s"] = q(float(gaps["total_duration_s"]), 0.001)
+            if "longest_gap_s" in gaps:
+                gaps["longest_gap_s"] = q(float(gaps["longest_gap_s"]), 0.001)
+            for seg in gaps.get("segments", []):
+                if "start_s" in seg:
+                    seg["start_s"] = q(float(seg["start_s"]), 0.001)
+                if "end_s" in seg:
+                    seg["end_s"] = q(float(seg["end_s"]), 0.001)
+                if "duration_s" in seg:
+                    seg["duration_s"] = q(float(seg["duration_s"]), 0.001)
 
     if report.get("repair"):
         repair_metrics = report["repair"].get("metrics", {})

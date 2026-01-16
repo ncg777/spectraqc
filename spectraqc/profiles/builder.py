@@ -132,6 +132,9 @@ def build_reference_profile(
                 "frame_seconds": 0.1,
                 "hop_seconds": 0.1,
                 "min_duration_seconds": 0.3,
+                "leading_threshold_seconds": 0.2,
+                "trailing_threshold_seconds": 0.2,
+                "min_content_seconds": 1.0,
             },
             "dynamic_range": {
                 "rms_percentile": {
@@ -214,6 +217,21 @@ def build_reference_profile(
                         "warn_count": 1,
                         "fail_count": 3,
                         "warn_total_seconds": 0.1,
+                        "fail_total_seconds": 0.5,
+                    },
+                },
+                "silence_detection": {
+                    "min_rms_dbfs": -60.0,
+                    "frame_seconds": 0.1,
+                    "hop_seconds": 0.1,
+                    "min_duration_seconds": 0.3,
+                    "leading_threshold_seconds": 0.2,
+                    "trailing_threshold_seconds": 0.2,
+                    "min_content_seconds": 1.0,
+                    "gaps": {
+                        "warn_count": 1,
+                        "fail_count": 3,
+                        "warn_total_seconds": 0.2,
                         "fail_total_seconds": 0.5,
                     },
                 },

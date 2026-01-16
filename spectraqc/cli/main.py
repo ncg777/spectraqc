@@ -53,6 +53,7 @@ from spectraqc.profiles.loader import load_reference_profile
 from spectraqc.thresholds.evaluator import evaluate
 from spectraqc.thresholds.brickwall import evaluate_spectral_artifacts
 from spectraqc.thresholds.level_anomalies import evaluate_level_anomalies
+from spectraqc.thresholds.silence_detection import evaluate_silence_gaps
 from spectraqc.reporting.qcreport import build_qcreport_dict
 from spectraqc.reporting.batch_summary import (
     build_batch_summary,
@@ -74,6 +75,9 @@ EXIT_INTERNAL_ERROR = 5
 MIN_EFFECTIVE_SECONDS = 0.5
 SILENCE_MIN_RMS_DBFS = -60.0
 SILENCE_FRAME_SECONDS = 0.1
+SILENCE_LEADING_THRESHOLD_SECONDS = 0.2
+SILENCE_TRAILING_THRESHOLD_SECONDS = 0.2
+SILENCE_MIN_CONTENT_SECONDS = 1.0
 SUPPORTED_AUDIO_EXTS = {".wav", ".flac", ".aiff", ".aif", ".mp3"}
 
 VIEWPORT_JS_HELPER = """
@@ -1349,6 +1353,28 @@ def _analyze_audio(
                 "min_duration_seconds", silence_defaults.get("min_duration_seconds", 0.3)
             )
         ),
+        "leading_threshold_seconds": float(
+            silence_override.get(
+                "leading_threshold_seconds",
+                silence_defaults.get(
+                    "leading_threshold_seconds", SILENCE_LEADING_THRESHOLD_SECONDS
+                ),
+            )
+        ),
+        "trailing_threshold_seconds": float(
+            silence_override.get(
+                "trailing_threshold_seconds",
+                silence_defaults.get(
+                    "trailing_threshold_seconds", SILENCE_TRAILING_THRESHOLD_SECONDS
+                ),
+            )
+        ),
+        "min_content_seconds": float(
+            silence_override.get(
+                "min_content_seconds",
+                silence_defaults.get("min_content_seconds", SILENCE_MIN_CONTENT_SECONDS),
+            )
+        ),
     }
     if channel_policy == "per_channel" and mode != "exploratory":
         raise ValueError("per_channel policy is only supported in exploratory mode.")
@@ -1415,10 +1441,13 @@ def _analyze_audio(
             frame_seconds=silence_cfg["frame_seconds"],
             hop_seconds=silence_cfg["hop_seconds"],
             min_duration_seconds=silence_cfg["min_duration_seconds"],
+            leading_threshold_seconds=silence_cfg["leading_threshold_seconds"],
+            trailing_threshold_seconds=silence_cfg["trailing_threshold_seconds"],
+            min_content_seconds=silence_cfg["min_content_seconds"],
         )
         silence_ratio = float(silence_metrics["silence_ratio"])
-        effective_duration = analysis_buffer.duration - float(
-            silence_metrics["total_silence_s"]
+        effective_duration = float(
+            silence_metrics.get("content_duration_s", analysis_buffer.duration)
         )
 
         ltpsd = compute_ltpsd(analysis_buffer, nfft=nfft, hop=hop)
@@ -1571,6 +1600,10 @@ def _analyze_audio(
     silence_metrics = chosen["silence_metrics"]
     effective_duration = chosen["effective_duration"]
     resampled = chosen["resampled"]
+    gap_flags = evaluate_silence_gaps(
+        silence_metrics,
+        config=profile.thresholds.get("silence_detection", {}),
+    )
     
     # Build QCReport
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1630,6 +1663,9 @@ def _analyze_audio(
             "frame_seconds": silence_cfg["frame_seconds"],
             "hop_seconds": silence_cfg["hop_seconds"],
             "min_duration_seconds": silence_cfg["min_duration_seconds"],
+            "leading_threshold_seconds": silence_cfg["leading_threshold_seconds"],
+            "trailing_threshold_seconds": silence_cfg["trailing_threshold_seconds"],
+            "min_content_seconds": silence_cfg["min_content_seconds"],
             "silence_ratio": silence_ratio,
             "effective_seconds": effective_duration
         }
@@ -1731,7 +1767,7 @@ def _analyze_audio(
             }
             for gd in decision.global_decisions
         ],
-        "flags": spectral_flags + level_flags
+        "flags": spectral_flags + level_flags + gap_flags
     }
     
     # Confidence assessment
