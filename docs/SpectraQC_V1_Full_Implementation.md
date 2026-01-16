@@ -888,8 +888,10 @@ def _tolist(a: np.ndarray) -> list[float]:
     return [float(x) for x in a.tolist()]
 
 def build_qcreport_dict(*, engine: dict, input_meta: dict, profile: dict, analysis: dict,
-                        freqs_hz: np.ndarray, ltpsd_mean_db: np.ndarray, ltpsd_var_db2: np.ndarray,
-                        delta_mean_db: np.ndarray, band_metrics: list[dict], global_metrics: dict,
+                        freqs_hz: np.ndarray, ref_mean_db: np.ndarray | None = None,
+                        ref_var_db2: np.ndarray | None = None, ltpsd_mean_db: np.ndarray,
+                        ltpsd_var_db2: np.ndarray, delta_mean_db: np.ndarray,
+                        band_metrics: list[dict], global_metrics: dict,
                         decisions: dict, confidence: dict) -> dict:
     report = {
         "schema_version": "1.0",
@@ -915,6 +917,14 @@ def build_qcreport_dict(*, engine: dict, input_meta: dict, profile: dict, analys
         }
     }
 
+    if ref_mean_db is not None:
+        if ref_var_db2 is None:
+            ref_var_db2 = np.ones_like(ref_mean_db)
+        report["metrics"]["reference"] = {
+            "mean_db": _tolist(ref_mean_db),
+            "var_db2": _tolist(ref_var_db2),
+        }
+
     # Quantize for stable hashing
     if "normalization" in report.get("analysis", {}):
         l = report["analysis"]["normalization"].get("loudness", {})
@@ -930,6 +940,9 @@ def build_qcreport_dict(*, engine: dict, input_meta: dict, profile: dict, analys
     report["metrics"]["ltpsd"]["mean_db"] = q_list(report["metrics"]["ltpsd"]["mean_db"], 0.01)
     report["metrics"]["deviation"]["delta_mean_db"] = q_list(report["metrics"]["deviation"]["delta_mean_db"], 0.01)
     report["metrics"]["ltpsd"]["var_db2"] = q_list(report["metrics"]["ltpsd"]["var_db2"], 0.001)
+    if "reference" in report["metrics"]:
+        report["metrics"]["reference"]["mean_db"] = q_list(report["metrics"]["reference"]["mean_db"], 0.01)
+        report["metrics"]["reference"]["var_db2"] = q_list(report["metrics"]["reference"]["var_db2"], 0.001)
 
     for bm in report["metrics"]["band_metrics"]:
         bm["mean_deviation_db"] = q(float(bm["mean_deviation_db"]), 0.01)
