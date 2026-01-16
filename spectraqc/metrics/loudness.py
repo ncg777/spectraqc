@@ -7,6 +7,7 @@ import subprocess
 
 _LUFS_RE = re.compile(r"I:\s*(-?\d+(?:\.\d+)?)\s*LUFS")
 _LRA_RE = re.compile(r"LRA:\s*(-?\d+(?:\.\d+)?)\s*LU")
+_SHORT_TERM_RE = re.compile(r"\bS:\s*(-?\d+(?:\.\d+)?)\b")
 
 
 def _run_ebur128(x: np.ndarray, fs: float) -> str:
@@ -60,6 +61,13 @@ def _parse_lra(stderr: str) -> float:
     return float(matches[-1])
 
 
+def _parse_short_term_series(stderr: str) -> np.ndarray:
+    matches = _SHORT_TERM_RE.findall(stderr)
+    if not matches:
+        raise ValueError("ffmpeg ebur128 did not report short-term loudness.")
+    return np.array([float(v) for v in matches], dtype=np.float64)
+
+
 def integrated_lufs_mono(x: np.ndarray, fs: float) -> float:
     """
     Compute integrated loudness in LUFS for mono audio using ffmpeg ebur128.
@@ -105,3 +113,18 @@ def loudness_metrics_mono(x: np.ndarray, fs: float) -> tuple[float, float]:
     """
     stderr = _run_ebur128(x, fs)
     return _parse_integrated_lufs(stderr), _parse_lra(stderr)
+
+
+def short_term_lufs_series_mono(x: np.ndarray, fs: float) -> np.ndarray:
+    """
+    Return the short-term loudness series (LUFS) for mono audio.
+
+    Args:
+        x: Mono audio samples (1D array)
+        fs: Sample rate in Hz
+
+    Returns:
+        Array of short-term loudness values in LUFS
+    """
+    stderr = _run_ebur128(x, fs)
+    return _parse_short_term_series(stderr)

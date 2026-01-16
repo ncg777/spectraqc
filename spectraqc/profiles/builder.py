@@ -126,6 +126,18 @@ def build_reference_profile(
                 "octave_fraction": octave_fraction,
             },
             "channel_policy": "mono",
+            "dynamic_range": {
+                "rms_percentile": {
+                    "frame_seconds": 3.0,
+                    "hop_seconds": 1.0,
+                    "low_percentile": 10.0,
+                    "high_percentile": 95.0,
+                },
+                "short_term_lufs": {
+                    "low_percentile": 10.0,
+                    "high_percentile": 95.0,
+                },
+            },
             "normalization": {
                 "loudness": {
                     "enabled": False,
@@ -170,6 +182,8 @@ def build_reference_profile(
                 "noise_floor_dbfs": {"pass": -60.0, "warn": -54.0},
                 "crest_factor_db": {"pass": 12.0, "warn": 8.0},
                 "loudness_range": {"pass": 12.0, "warn": 18.0},
+                "dynamic_range_db": {"pass": 8.0, "warn": 6.0},
+                "dynamic_range_lu": {"pass": 8.0, "warn": 6.0},
                 "tonal_peak": {"pass": 6.0, "warn": 10.0},
             },
             "aggregation": {

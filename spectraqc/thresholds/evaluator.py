@@ -343,6 +343,60 @@ def evaluate(
         if lra_stat == Status.FAIL:
             any_fail = True
 
+    if global_metrics.dynamic_range_db is not None and "dynamic_range_db" in thresholds:
+        dr_pass, dr_warn = thresholds["dynamic_range_db"]
+        dr_stat = _status_low_is_bad(
+            float(global_metrics.dynamic_range_db), dr_pass, dr_warn
+        )
+        global_decisions.append(
+            ThresholdResult(
+                metric="dynamic_range_db",
+                value=float(global_metrics.dynamic_range_db),
+                units="dB",
+                status=dr_stat,
+                pass_limit=dr_pass,
+                warn_limit=dr_warn,
+                notes=_explain(
+                    metric="dynamic_range_db",
+                    value=float(global_metrics.dynamic_range_db),
+                    units="dB",
+                    status=dr_stat,
+                    pass_lim=dr_pass,
+                    warn_lim=dr_warn,
+                    compare="below"
+                )
+            )
+        )
+        if dr_stat == Status.FAIL:
+            any_fail = True
+
+    if global_metrics.dynamic_range_lu is not None and "dynamic_range_lu" in thresholds:
+        dr_pass, dr_warn = thresholds["dynamic_range_lu"]
+        dr_stat = _status_low_is_bad(
+            float(global_metrics.dynamic_range_lu), dr_pass, dr_warn
+        )
+        global_decisions.append(
+            ThresholdResult(
+                metric="dynamic_range_lu",
+                value=float(global_metrics.dynamic_range_lu),
+                units="LU",
+                status=dr_stat,
+                pass_limit=dr_pass,
+                warn_limit=dr_warn,
+                notes=_explain(
+                    metric="dynamic_range_lu",
+                    value=float(global_metrics.dynamic_range_lu),
+                    units="LU",
+                    status=dr_stat,
+                    pass_lim=dr_pass,
+                    warn_lim=dr_warn,
+                    compare="below"
+                )
+            )
+        )
+        if dr_stat == Status.FAIL:
+            any_fail = True
+
     # Tonal peak evaluation if configured
     if (
         global_metrics.tonal_peak_max_delta_db is not None

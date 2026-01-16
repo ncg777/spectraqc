@@ -112,6 +112,20 @@ def load_reference_profile(path: str) -> ReferenceProfile:
             float(lra_rules["warn"]),
         )
 
+    dr_db_rules = tm.get("dynamic_range_db")
+    if dr_db_rules:
+        thresholds["dynamic_range_db"] = (
+            float(dr_db_rules["pass"]),
+            float(dr_db_rules["warn"]),
+        )
+
+    dr_lu_rules = tm.get("dynamic_range_lu")
+    if dr_lu_rules:
+        thresholds["dynamic_range_lu"] = (
+            float(dr_lu_rules["pass"]),
+            float(dr_lu_rules["warn"]),
+        )
+
     tonal_rules = tm.get("tonal_peak")
     if tonal_rules:
         thresholds["tonal_peak_delta_db"] = (

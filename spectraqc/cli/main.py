@@ -35,6 +35,10 @@ from spectraqc.metrics.levels import (
     rms_dbfs_mono,
     crest_factor_db_mono,
 )
+from spectraqc.metrics.dr import (
+    dynamic_range_percentile_dbfs_mono,
+    dynamic_range_short_term_lufs_mono,
+)
 from spectraqc.metrics.loudness import loudness_metrics_mono
 from spectraqc.dsp.repair import apply_repair_plan, compute_repair_metrics
 from spectraqc.algorithms.registry import (
@@ -1312,6 +1316,7 @@ def _analyze_audio(
     psd_estimator = analysis_lock.get("psd_estimator", "welch")
     target_fs = analysis_lock.get("resample_fs_hz")
     target_fs = float(target_fs) if target_fs is not None else None
+    dynamic_range_cfg = analysis_lock.get("dynamic_range", {})
     
     smoothing_cfg = profile.thresholds.get("_smoothing", {"type": "none"})
     ref_var = profile.thresholds.get("_ref_var_db2", np.ones_like(profile.freqs_hz))
@@ -1334,6 +1339,8 @@ def _analyze_audio(
         LOUDNESS_ALGO_ID,
         TRUE_PEAK_ALGO_ID,
         "channel_policy_v1",
+        "dynamic_range_rms_percentile_v1",
+        "dynamic_range_short_term_lufs_v1",
     }
     if smoothing_cfg.get("type") == "octave_fraction":
         required_ids.add("smoothing_octave_fraction_v1")
@@ -1413,6 +1420,26 @@ def _analyze_audio(
             lufs_i = None
             lra_lu = None
 
+        rms_cfg = dynamic_range_cfg.get("rms_percentile", {})
+        dr_db = dynamic_range_percentile_dbfs_mono(
+            analysis_buffer.samples,
+            analysis_buffer.fs,
+            frame_seconds=float(rms_cfg.get("frame_seconds", 3.0)),
+            hop_seconds=float(rms_cfg.get("hop_seconds", 1.0)),
+            low_percentile=float(rms_cfg.get("low_percentile", 10.0)),
+            high_percentile=float(rms_cfg.get("high_percentile", 95.0)),
+        )
+        short_term_cfg = dynamic_range_cfg.get("short_term_lufs", {})
+        try:
+            dr_lu = dynamic_range_short_term_lufs_mono(
+                analysis_buffer.samples,
+                analysis_buffer.fs,
+                low_percentile=float(short_term_cfg.get("low_percentile", 10.0)),
+                high_percentile=float(short_term_cfg.get("high_percentile", 95.0)),
+            )
+        except Exception:
+            dr_lu = None
+
         tonal_peaks = detect_tonal_peaks(
             profile.freqs_hz,
             input_mean_db_raw,
@@ -1435,6 +1462,8 @@ def _analyze_audio(
             lra_lu=lra_lu,
             tonal_peak_max_delta_db=tonal_peak_max_delta,
             noise_floor_dbfs=noise_floor_dbfs,
+            dynamic_range_db=dr_db,
+            dynamic_range_lu=dr_lu,
         )
 
         spectral_artifacts = detect_spectral_artifacts(
@@ -1534,6 +1563,7 @@ def _analyze_audio(
             {"name": b.name, "f_low_hz": b.f_low, "f_high_hz": b.f_high}
             for b in profile.bands
         ],
+        "dynamic_range": dynamic_range_cfg,
         "normalization": {
             "loudness": {
                 "enabled": bool(loud_cfg.get("enabled", False)),
@@ -1587,6 +1617,10 @@ def _analyze_audio(
         global_metrics_dict["crest_factor_db"] = global_metrics.crest_factor_db
     if global_metrics.lra_lu is not None:
         global_metrics_dict["lra_lu"] = global_metrics.lra_lu
+    if global_metrics.dynamic_range_db is not None:
+        global_metrics_dict["dynamic_range_db"] = global_metrics.dynamic_range_db
+    if global_metrics.dynamic_range_lu is not None:
+        global_metrics_dict["dynamic_range_lu"] = global_metrics.dynamic_range_lu
     if global_metrics.tonal_peak_max_delta_db is not None:
         global_metrics_dict["tonal_peak_max_delta_db"] = global_metrics.tonal_peak_max_delta_db
     if tonal_peaks:
