@@ -339,3 +339,82 @@ def compute_repair_metrics(
         "deviation_curve_db": compute_deviation_curve(mono, fs, profile).tolist()
     }
     return metrics
+
+
+def suggest_repair_plan(
+    samples: np.ndarray,
+    fs: float,
+    profile: ReferenceProfile
+) -> tuple[dict, dict]:
+    """Suggest a repair plan based on quick diagnostics."""
+    mono = _mono_view(np.asarray(samples, dtype=np.float64))
+    metrics = compute_repair_metrics(mono, fs, profile)
+    steps: list[dict] = []
+    notes: list[str] = []
+
+    clip_threshold = 0.98
+    clip_ratio = float(np.mean(np.abs(mono) >= clip_threshold)) if mono.size else 0.0
+    if clip_ratio > 0.0001:
+        steps.append({"name": "declip", "params": {"clip_threshold": clip_threshold}})
+        notes.append(f"Detected clipping ratio {clip_ratio:.4f}, adding declip.")
+
+    noise_floor = metrics["noise_floor_dbfs"]
+    if noise_floor > -60.0:
+        steps.append({
+            "name": "denoise",
+            "params": {"frame_seconds": 0.1, "attenuation_db": 6.0, "threshold_db_offset": 3.0}
+        })
+        notes.append(f"Noise floor {noise_floor:.1f} dBFS, adding denoise.")
+
+    deviation = np.array(metrics["deviation_curve_db"], dtype=np.float64)
+    freqs = np.array(profile.freqs_hz, dtype=np.float64)
+    hum_candidates = [50.0, 60.0]
+    for hum in hum_candidates:
+        if freqs.size == 0:
+            break
+        mask = (freqs >= hum - 1.0) & (freqs <= hum + 1.0)
+        if np.any(mask):
+            hum_dev = float(np.mean(deviation[mask]))
+            if hum_dev > 6.0:
+                steps.append({"name": "dehum", "params": {"hum_freq_hz": hum, "harmonics": 5, "bandwidth_hz": 1.0}})
+                notes.append(f"Detected hum around {hum:.0f} Hz (+{hum_dev:.1f} dB), adding dehum.")
+                break
+
+    normalization = profile.normalization or {}
+    loud_cfg = normalization.get("loudness", {})
+    if loud_cfg.get("enabled", False):
+        target = float(loud_cfg.get("target_lufs_i", -24.0))
+        steps.append({"name": "loudness_normalize", "params": {"target_lufs_i": target}})
+        notes.append(f"Loudness normalization enabled, target {target:.1f} LUFS.")
+
+    tp_cfg = normalization.get("true_peak", {})
+    max_dbtp = None
+    if tp_cfg.get("enabled", False):
+        max_dbtp = float(tp_cfg.get("max_dbtp", -1.0))
+    if max_dbtp is not None and metrics["true_peak_dbtp"] > max_dbtp:
+        steps.append({"name": "true_peak_limit", "params": {"max_dbtp": max_dbtp}})
+        notes.append(
+            f"True peak {metrics['true_peak_dbtp']:.2f} dBTP exceeds {max_dbtp:.2f} dBTP, adding limiter."
+        )
+
+    plan = {
+        "schema_version": "1.0",
+        "profile": {
+            "name": profile.name,
+            "kind": profile.kind,
+            "version": profile.version,
+        },
+        "generated": {
+            "notes": notes,
+            "metrics": metrics,
+        },
+        "steps": steps,
+    }
+    summary = {
+        "suggested_step_count": len(steps),
+        "clip_ratio": clip_ratio,
+        "noise_floor_dbfs": noise_floor,
+        "true_peak_dbtp": metrics["true_peak_dbtp"],
+        "notes": notes,
+    }
+    return plan, summary

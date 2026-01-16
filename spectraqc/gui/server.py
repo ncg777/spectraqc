@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import webbrowser
+from uuid import uuid4
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -30,6 +31,12 @@ def _as_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _uploads_dir() -> Path:
+    base = Path.cwd() / ".spectraqc_gui_uploads"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
 
 
 def _build_index_html() -> str:
@@ -159,6 +166,19 @@ def _build_index_html() -> str:
     button.primary:hover {{
       background: var(--primary-dark);
     }}
+    button.secondary {{
+      background: #f1f4ff;
+      border: 1px solid #c7d2fe;
+      color: #2f3a8f;
+      padding: 10px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+    }}
+    button.secondary:hover {{
+      background: #e0e7ff;
+    }}
     .muted {{
       color: var(--muted);
       font-size: 13px;
@@ -191,6 +211,12 @@ def _build_index_html() -> str:
       gap: 12px;
       flex-wrap: wrap;
       align-items: center;
+    }}
+    .row.tight {{
+      flex-wrap: nowrap;
+    }}
+    .row.tight input {{
+      flex: 1 1 auto;
     }}
     .row > * {{
       flex: 1;
@@ -245,7 +271,10 @@ def _build_index_html() -> str:
           </div>
           <div>
             <label>Profile path</label>
-            <input id="analyze-profile" placeholder="/path/to/profile.ref.json">
+            <div class="row tight">
+              <input id="analyze-profile" placeholder="/path/to/profile.ref.json">
+              <button class="secondary" type="button" data-upload-target="analyze-profile">Upload JSON</button>
+            </div>
           </div>
           <div>
             <label>Mode</label>
@@ -282,7 +311,10 @@ def _build_index_html() -> str:
           </div>
           <div>
             <label>Profile path</label>
-            <input id="validate-profile" placeholder="/path/to/profile.ref.json">
+            <div class="row tight">
+              <input id="validate-profile" placeholder="/path/to/profile.ref.json">
+              <button class="secondary" type="button" data-upload-target="validate-profile">Upload JSON</button>
+            </div>
           </div>
           <div>
             <label>Fail on</label>
@@ -311,11 +343,18 @@ def _build_index_html() -> str:
           </div>
           <div>
             <label>Profile path</label>
-            <input id="repair-profile" placeholder="/path/to/profile.ref.json">
+            <div class="row tight">
+              <input id="repair-profile" placeholder="/path/to/profile.ref.json">
+              <button class="secondary" type="button" data-upload-target="repair-profile">Upload JSON</button>
+            </div>
           </div>
           <div>
             <label>Repair plan path</label>
             <input id="repair-plan" placeholder="/path/to/repair-plan.yaml">
+          </div>
+          <div>
+            <label>Repair plan JSON (optional)</label>
+            <textarea id="repair-plan-json" placeholder='{"steps":[{"name":"dehum","params":{"hum_freq_hz":60}}]}'></textarea>
           </div>
           <div>
             <label>Output audio path (optional)</label>
@@ -328,6 +367,7 @@ def _build_index_html() -> str:
         </div>
         <div class="row" style="margin-top:16px;">
           <button class="primary" id="repair-run">Run repair</button>
+          <button class="secondary" type="button" id="repair-plan-suggest">Suggest plan</button>
           <div id="repair-status" class="muted"></div>
         </div>
         <div id="repair-result" class="result" style="margin-top:16px; display:none;"></div>
@@ -341,7 +381,10 @@ def _build_index_html() -> str:
         <div class="grid">
           <div>
             <label>Profile path</label>
-            <input id="inspect-profile" placeholder="/path/to/profile.ref.json">
+            <div class="row tight">
+              <input id="inspect-profile" placeholder="/path/to/profile.ref.json">
+              <button class="secondary" type="button" data-upload-target="inspect-profile">Upload JSON</button>
+            </div>
           </div>
         </div>
         <div class="row" style="margin-top:16px;">
@@ -363,11 +406,17 @@ def _build_index_html() -> str:
           </div>
           <div>
             <label>Manifest (optional)</label>
-            <input id="batch-manifest" placeholder="/path/to/manifest.json">
+            <div class="row tight">
+              <input id="batch-manifest" placeholder="/path/to/manifest.json">
+              <button class="secondary" type="button" data-upload-target="batch-manifest">Upload JSON</button>
+            </div>
           </div>
           <div>
             <label>Profile path</label>
-            <input id="batch-profile" placeholder="/path/to/profile.ref.json">
+            <div class="row tight">
+              <input id="batch-profile" placeholder="/path/to/profile.ref.json">
+              <button class="secondary" type="button" data-upload-target="batch-profile">Upload JSON</button>
+            </div>
           </div>
           <div>
             <label>Mode</label>
@@ -432,11 +481,18 @@ def _build_index_html() -> str:
     <section id="build-profile">
       <div class="card">
         <h2>Build Reference Profile</h2>
-        <p class="muted">Generate a .ref.json profile from a corpus manifest.</p>
+        <p class="muted">Generate a .ref.json profile from a manifest or folder.</p>
         <div class="grid">
           <div>
-            <label>Manifest path</label>
-            <input id="build-manifest" placeholder="/path/to/manifest.json">
+            <label>Manifest path (optional)</label>
+            <div class="row tight">
+              <input id="build-manifest" placeholder="/path/to/manifest.json">
+              <button class="secondary" type="button" data-upload-target="build-manifest">Upload JSON</button>
+            </div>
+          </div>
+          <div>
+            <label>Folder path (optional)</label>
+            <input id="build-folder" placeholder="/path/to/audio/folder">
           </div>
           <div>
             <label>Output path (optional)</label>
@@ -455,6 +511,9 @@ def _build_index_html() -> str:
               <option value="custom">custom</option>
             </select>
           </div>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <label><input type="checkbox" id="build-recursive"> Recurse into subfolders</label>
         </div>
         <div class="row" style="margin-top:16px;">
           <button class="primary" id="build-run">Build profile</button>
@@ -499,6 +558,30 @@ def _build_index_html() -> str:
       return data.data;
     }};
 
+    const uploadJsonForTarget = async (targetId) => {{
+      const picker = document.createElement("input");
+      picker.type = "file";
+      picker.accept = ".json";
+      picker.addEventListener("change", async () => {{
+        const file = picker.files[0];
+        if (!file) return;
+        try {{
+          const content = await file.text();
+          const data = await postJSON("/api/upload-json", {{
+            filename: file.name,
+            content
+          }});
+          const target = document.getElementById(targetId);
+          if (target) {{
+            target.value = data.path;
+          }}
+        }} catch (err) {{
+          alert(`Upload failed: ${err.message}`);
+        }}
+      }});
+      picker.click();
+    }};
+
     const setResult = (element, content) => {{
       element.textContent = content;
       element.style.display = "block";
@@ -508,6 +591,13 @@ def _build_index_html() -> str:
       element.textContent = message;
       element.style.color = isError ? "var(--danger)" : "var(--muted)";
     }};
+
+    document.querySelectorAll("[data-upload-target]").forEach((btn) => {{
+      btn.addEventListener("click", () => {{
+        const target = btn.dataset.uploadTarget;
+        uploadJsonForTarget(target);
+      }});
+    }});
 
     document.getElementById("analyze-run").addEventListener("click", async () => {{
       const statusEl = document.getElementById("analyze-status");
@@ -559,11 +649,28 @@ def _build_index_html() -> str:
           audio_path: document.getElementById("repair-audio").value,
           profile_path: document.getElementById("repair-profile").value,
           repair_plan: document.getElementById("repair-plan").value,
+          plan_json: document.getElementById("repair-plan-json").value,
           out_path: document.getElementById("repair-out").value,
           report_path: document.getElementById("repair-report").value
         }});
         setStatus(statusEl, `Status: ${{data.status.toUpperCase()}}`);
         setResult(resultEl, JSON.stringify(data, null, 2));
+      }} catch (err) {{
+        setStatus(statusEl, err.message, true);
+      }}
+    }});
+
+    document.getElementById("repair-plan-suggest").addEventListener("click", async () => {{
+      const statusEl = document.getElementById("repair-status");
+      const planEl = document.getElementById("repair-plan-json");
+      setStatus(statusEl, "Generating plan...");
+      try {{
+        const data = await postJSON("/api/repair-plan", {{
+          audio_path: document.getElementById("repair-audio").value,
+          profile_path: document.getElementById("repair-profile").value
+        }});
+        planEl.value = JSON.stringify(data.plan, null, 2);
+        setStatus(statusEl, `Plan ready (${data.summary.suggested_step_count} steps)`);
       }} catch (err) {{
         setStatus(statusEl, err.message, true);
       }}
@@ -645,9 +752,11 @@ def _build_index_html() -> str:
       try {{
         const data = await postJSON("/api/build-profile", {{
           manifest_path: document.getElementById("build-manifest").value,
+          folder_path: document.getElementById("build-folder").value,
           out_path: document.getElementById("build-out").value,
           profile_name: document.getElementById("build-name").value,
-          profile_kind: document.getElementById("build-kind").value
+          profile_kind: document.getElementById("build-kind").value,
+          recursive: document.getElementById("build-recursive").checked
         }});
         setStatus(statusEl, "Profile created");
         setResult(resultEl, JSON.stringify(data, null, 2));
@@ -726,9 +835,11 @@ class SpectraQCGUIHandler(BaseHTTPRequestHandler):
             "/api/analyze": self._handle_analyze,
             "/api/validate": self._handle_validate,
             "/api/repair": self._handle_repair,
+            "/api/repair-plan": self._handle_repair_plan,
             "/api/inspect": self._handle_inspect,
             "/api/batch": self._handle_batch,
             "/api/build-profile": self._handle_build_profile,
+            "/api/upload-json": self._handle_upload_json,
         }
         handler = routes.get(self.path)
         if not handler:
@@ -845,13 +956,24 @@ class SpectraQCGUIHandler(BaseHTTPRequestHandler):
         audio_path = _strip_or_none(payload.get("audio_path"))
         profile_path = _strip_or_none(payload.get("profile_path"))
         repair_plan = _strip_or_none(payload.get("repair_plan"))
-        if not audio_path or not profile_path or not repair_plan:
-            raise ValueError("audio_path, profile_path, and repair_plan are required.")
+        plan_json = _strip_or_none(payload.get("plan_json"))
+        if not audio_path or not profile_path:
+            raise ValueError("audio_path and profile_path are required.")
+        if not repair_plan and not plan_json:
+            raise ValueError("repair_plan path or plan_json is required.")
         out_path = _strip_or_none(payload.get("out_path"))
         report_path = _strip_or_none(payload.get("report_path"))
 
         profile = load_reference_profile(profile_path)
-        plan = cli_main._load_repair_plan(repair_plan)
+        if plan_json:
+            try:
+                plan = json.loads(plan_json)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid plan_json: {exc}") from exc
+        else:
+            plan = cli_main._load_repair_plan(repair_plan)
+        if not isinstance(plan, dict) or "steps" not in plan:
+            raise ValueError("repair plan must be a mapping with a 'steps' list.")
         audio = load_audio(audio_path)
         repaired_samples, steps = apply_repair_plan(audio.samples, audio.fs, plan)
         resolved_out_path = Path(out_path) if out_path else Path(audio_path).with_suffix(".repaired.wav")
@@ -901,6 +1023,39 @@ class SpectraQCGUIHandler(BaseHTTPRequestHandler):
             "repaired_audio_path": str(resolved_out_path),
             "report_path": report_path,
         }
+
+    def _handle_repair_plan(self, payload: dict) -> dict:
+        from spectraqc.dsp.repair import suggest_repair_plan
+        from spectraqc.io.audio import load_audio
+        from spectraqc.profiles.loader import load_reference_profile
+
+        audio_path = _strip_or_none(payload.get("audio_path"))
+        profile_path = _strip_or_none(payload.get("profile_path"))
+        if not audio_path or not profile_path:
+            raise ValueError("audio_path and profile_path are required.")
+
+        profile = load_reference_profile(profile_path)
+        audio = load_audio(audio_path)
+        plan, summary = suggest_repair_plan(audio.samples, audio.fs, profile)
+
+        return {
+            "plan": plan,
+            "summary": summary,
+        }
+
+    def _handle_upload_json(self, payload: dict) -> dict:
+        filename = _strip_or_none(payload.get("filename")) or "upload.json"
+        content = payload.get("content")
+        if content is None:
+            raise ValueError("content is required.")
+        if not isinstance(content, str):
+            raise ValueError("content must be a string.")
+        safe_name = Path(filename).name
+        if not safe_name.endswith(".json"):
+            safe_name = f"{safe_name}.json"
+        target = _uploads_dir() / f"{uuid4().hex}_{safe_name}"
+        target.write_text(content, encoding="utf-8")
+        return {"path": str(target)}
 
     def _handle_inspect(self, payload: dict) -> dict:
         from spectraqc.profiles.loader import load_reference_profile
@@ -1098,21 +1253,37 @@ class SpectraQCGUIHandler(BaseHTTPRequestHandler):
         }
 
     def _handle_build_profile(self, payload: dict) -> dict:
-        from spectraqc.profiles.builder import build_reference_profile_from_manifest
+        from spectraqc.profiles.builder import (
+            build_reference_profile_from_folder,
+            build_reference_profile_from_manifest,
+        )
 
         manifest_path = _strip_or_none(payload.get("manifest_path"))
-        if not manifest_path:
-            raise ValueError("manifest_path is required.")
+        folder_path = _strip_or_none(payload.get("folder_path"))
+        if bool(manifest_path) == bool(folder_path):
+            raise ValueError("Provide exactly one of manifest_path or folder_path.")
         profile_name = _strip_or_none(payload.get("profile_name")) or "streaming_generic_v1"
         profile_kind = _strip_or_none(payload.get("profile_kind")) or "streaming"
         out_path = _strip_or_none(payload.get("out_path"))
+        recursive = bool(payload.get("recursive"))
 
-        profile, output_path = build_reference_profile_from_manifest(
-            manifest_path,
-            profile_name=profile_name,
-            profile_kind=profile_kind,
-            output_path=out_path,
-        )
+        if manifest_path:
+            profile, output_path = build_reference_profile_from_manifest(
+                manifest_path,
+                profile_name=profile_name,
+                profile_kind=profile_kind,
+                output_path=out_path,
+            )
+            source = {"manifest_path": manifest_path}
+        else:
+            profile, output_path = build_reference_profile_from_folder(
+                folder_path,
+                recursive=recursive,
+                profile_name=profile_name,
+                profile_kind=profile_kind,
+                output_path=out_path,
+            )
+            source = {"folder_path": folder_path, "recursive": recursive}
 
         return {
             "profile_path": str(output_path),
@@ -1122,6 +1293,8 @@ class SpectraQCGUIHandler(BaseHTTPRequestHandler):
             "profile_hash": profile["integrity"]["profile_hash_sha256"],
             "band_count": len(profile["bands"]),
             "grid_bins": len(profile["frequency_grid"]["freqs_hz"]),
+            "file_count": profile["corpus_stats"]["file_count"],
+            "source": source,
         }
 
 
