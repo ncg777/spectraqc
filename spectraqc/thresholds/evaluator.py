@@ -27,6 +27,15 @@ def _status_high_is_bad(value: float, pass_lim: float, warn_lim: float) -> Statu
     return Status.FAIL
 
 
+def _status_low_is_bad(value: float, pass_lim: float, warn_lim: float) -> Status:
+    """Evaluate status where lower values are worse (e.g., crest factor)."""
+    if value >= pass_lim:
+        return Status.PASS
+    if value >= warn_lim:
+        return Status.WARN
+    return Status.FAIL
+
+
 def _explain(
     *,
     metric: str,
@@ -203,6 +212,83 @@ def evaluate(
             )
         )
         if tp_stat == Status.FAIL:
+            any_fail = True
+
+    if global_metrics.peak_dbfs is not None and "peak_dbfs" in thresholds:
+        peak_pass, peak_warn = thresholds["peak_dbfs"]
+        peak_stat = _status_high_is_bad(float(global_metrics.peak_dbfs), peak_pass, peak_warn)
+        global_decisions.append(
+            ThresholdResult(
+                metric="peak_dbfs",
+                value=float(global_metrics.peak_dbfs),
+                units="dBFS",
+                status=peak_stat,
+                pass_limit=peak_pass,
+                warn_limit=peak_warn,
+                notes=_explain(
+                    metric="peak_dbfs",
+                    value=float(global_metrics.peak_dbfs),
+                    units="dBFS",
+                    status=peak_stat,
+                    pass_lim=peak_pass,
+                    warn_lim=peak_warn,
+                    compare="above"
+                )
+            )
+        )
+        if peak_stat == Status.FAIL:
+            any_fail = True
+
+    if global_metrics.rms_dbfs is not None and "rms_dbfs" in thresholds:
+        rms_pass, rms_warn = thresholds["rms_dbfs"]
+        rms_stat = _status_high_is_bad(float(global_metrics.rms_dbfs), rms_pass, rms_warn)
+        global_decisions.append(
+            ThresholdResult(
+                metric="rms_dbfs",
+                value=float(global_metrics.rms_dbfs),
+                units="dBFS",
+                status=rms_stat,
+                pass_limit=rms_pass,
+                warn_limit=rms_warn,
+                notes=_explain(
+                    metric="rms_dbfs",
+                    value=float(global_metrics.rms_dbfs),
+                    units="dBFS",
+                    status=rms_stat,
+                    pass_lim=rms_pass,
+                    warn_lim=rms_warn,
+                    compare="above"
+                )
+            )
+        )
+        if rms_stat == Status.FAIL:
+            any_fail = True
+
+    if global_metrics.crest_factor_db is not None and "crest_factor_db" in thresholds:
+        crest_pass, crest_warn = thresholds["crest_factor_db"]
+        crest_stat = _status_low_is_bad(
+            float(global_metrics.crest_factor_db), crest_pass, crest_warn
+        )
+        global_decisions.append(
+            ThresholdResult(
+                metric="crest_factor_db",
+                value=float(global_metrics.crest_factor_db),
+                units="dB",
+                status=crest_stat,
+                pass_limit=crest_pass,
+                warn_limit=crest_warn,
+                notes=_explain(
+                    metric="crest_factor_db",
+                    value=float(global_metrics.crest_factor_db),
+                    units="dB",
+                    status=crest_stat,
+                    pass_lim=crest_pass,
+                    warn_lim=crest_warn,
+                    compare="below"
+                )
+            )
+        )
+        if crest_stat == Status.FAIL:
             any_fail = True
 
     # Tonal peak evaluation if configured

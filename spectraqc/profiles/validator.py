@@ -89,6 +89,9 @@ def validate_reference_profile_dict(j: dict) -> None:
     band_max = rules.get("band_max", {}).get("default", {})
     tilt = rules.get("tilt", {})
     tonal_peak = rules.get("tonal_peak", {})
+    peak_dbfs = rules.get("peak_dbfs", {})
+    rms_dbfs = rules.get("rms_dbfs", {})
+    crest_factor_db = rules.get("crest_factor_db", {})
     for name, obj in (("band_mean", band_mean), ("band_max", band_max), ("tilt", tilt)):
         p = obj.get("pass")
         w = obj.get("warn")
@@ -99,6 +102,17 @@ def validate_reference_profile_dict(j: dict) -> None:
         w = tonal_peak.get("warn")
         if not _is_number(p) or not _is_number(w) or w < p:
             err("threshold_model.rules.tonal_peak pass/warn must be numbers with warn>=pass.")
+    for name, obj in (
+        ("peak_dbfs", peak_dbfs),
+        ("rms_dbfs", rms_dbfs),
+        ("crest_factor_db", crest_factor_db),
+    ):
+        if not obj:
+            continue
+        p = obj.get("pass")
+        w = obj.get("warn")
+        if not _is_number(p) or not _is_number(w) or w < p:
+            err(f"threshold_model.rules.{name} pass/warn must be numbers with warn>=pass.")
     spectral_artifacts = rules.get("spectral_artifacts", {})
     if spectral_artifacts:
         cutoff = spectral_artifacts.get("cutoff", {})

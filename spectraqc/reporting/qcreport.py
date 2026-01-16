@@ -139,6 +139,12 @@ def build_qcreport_dict(
         gm["tilt_deviation_db_per_oct"] = q(float(gm["tilt_deviation_db_per_oct"]), 0.001)
     if "true_peak_dbtp" in gm:
         gm["true_peak_dbtp"] = q(float(gm["true_peak_dbtp"]), 0.01)
+    if "peak_dbfs" in gm:
+        gm["peak_dbfs"] = q(float(gm["peak_dbfs"]), 0.01)
+    if "rms_dbfs" in gm:
+        gm["rms_dbfs"] = q(float(gm["rms_dbfs"]), 0.01)
+    if "crest_factor_db" in gm:
+        gm["crest_factor_db"] = q(float(gm["crest_factor_db"]), 0.01)
     if "tonal_peak_max_delta_db" in gm:
         gm["tonal_peak_max_delta_db"] = q(float(gm["tonal_peak_max_delta_db"]), 0.01)
     if "tonal_peaks" in gm:

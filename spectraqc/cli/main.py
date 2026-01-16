@@ -29,6 +29,11 @@ from spectraqc.metrics.tilt import spectral_tilt_db_per_oct
 from spectraqc.metrics.brickwall import detect_spectral_artifacts
 from spectraqc.metrics.tonal import detect_tonal_peaks
 from spectraqc.metrics.truepeak import true_peak_dbtp_mono
+from spectraqc.metrics.levels import (
+    peak_dbfs_mono,
+    rms_dbfs_mono,
+    crest_factor_db_mono,
+)
 from spectraqc.metrics.loudness import integrated_lufs_mono
 from spectraqc.dsp.repair import apply_repair_plan, compute_repair_metrics
 from spectraqc.algorithms.registry import (
@@ -1391,6 +1396,9 @@ def _analyze_audio(
         tilt_dev = input_tilt - ref_tilt
 
         tp_dbtp = true_peak_dbtp_mono(analysis_buffer.samples, analysis_buffer.fs)
+        peak_dbfs = peak_dbfs_mono(analysis_buffer.samples)
+        rms_dbfs = rms_dbfs_mono(analysis_buffer.samples)
+        crest_factor_db = crest_factor_db_mono(analysis_buffer.samples)
 
         try:
             lufs_i = integrated_lufs_mono(analysis_buffer.samples, analysis_buffer.fs)
@@ -1412,6 +1420,9 @@ def _analyze_audio(
             spectral_tilt_db_per_oct=input_tilt,
             tilt_deviation_db_per_oct=tilt_dev,
             true_peak_dbtp=tp_dbtp,
+            peak_dbfs=peak_dbfs,
+            rms_dbfs=rms_dbfs,
+            crest_factor_db=crest_factor_db,
             lufs_i=lufs_i,
             tonal_peak_max_delta_db=tonal_peak_max_delta,
         )
@@ -1552,6 +1563,12 @@ def _analyze_audio(
     }
     if global_metrics.true_peak_dbtp is not None:
         global_metrics_dict["true_peak_dbtp"] = global_metrics.true_peak_dbtp
+    if global_metrics.peak_dbfs is not None:
+        global_metrics_dict["peak_dbfs"] = global_metrics.peak_dbfs
+    if global_metrics.rms_dbfs is not None:
+        global_metrics_dict["rms_dbfs"] = global_metrics.rms_dbfs
+    if global_metrics.crest_factor_db is not None:
+        global_metrics_dict["crest_factor_db"] = global_metrics.crest_factor_db
     if global_metrics.tonal_peak_max_delta_db is not None:
         global_metrics_dict["tonal_peak_max_delta_db"] = global_metrics.tonal_peak_max_delta_db
     if tonal_peaks:
