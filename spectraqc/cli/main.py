@@ -53,7 +53,10 @@ from spectraqc.profiles.loader import load_reference_profile
 from spectraqc.thresholds.evaluator import evaluate
 from spectraqc.thresholds.brickwall import evaluate_spectral_artifacts
 from spectraqc.thresholds.level_anomalies import evaluate_level_anomalies
-from spectraqc.thresholds.silence_detection import evaluate_silence_gaps
+from spectraqc.thresholds.silence_detection import (
+    evaluate_silence_gaps,
+    summarize_silence_gaps,
+)
 from spectraqc.reporting.qcreport import build_qcreport_dict
 from spectraqc.reporting.batch_summary import (
     build_batch_summary,
@@ -1331,6 +1334,8 @@ def _analyze_audio(
     channel_policy = str(analysis_lock.get("channel_policy", "mono")).strip().lower()
     silence_defaults = profile.thresholds.get("silence_detection", {})
     silence_override = analysis_lock.get("silence_detection", {})
+    silence_gap_defaults = silence_defaults.get("gaps", {})
+    silence_gap_override = silence_override.get("gaps", {})
     silence_cfg = {
         "min_rms_dbfs": float(
             silence_override.get(
@@ -1375,6 +1380,33 @@ def _analyze_audio(
                 silence_defaults.get("min_content_seconds", SILENCE_MIN_CONTENT_SECONDS),
             )
         ),
+        "gaps": {
+            "warn_count": int(
+                silence_gap_override.get(
+                    "warn_count", silence_gap_defaults.get("warn_count", 1)
+                )
+            ),
+            "fail_count": int(
+                silence_gap_override.get(
+                    "fail_count", silence_gap_defaults.get("fail_count", 3)
+                )
+            ),
+            "warn_total_seconds": float(
+                silence_gap_override.get(
+                    "warn_total_seconds", silence_gap_defaults.get("warn_total_seconds", 0.2)
+                )
+            ),
+            "fail_total_seconds": float(
+                silence_gap_override.get(
+                    "fail_total_seconds", silence_gap_defaults.get("fail_total_seconds", 0.5)
+                )
+            ),
+            "max_gap_seconds": float(
+                silence_gap_override.get(
+                    "max_gap_seconds", silence_gap_defaults.get("max_gap_seconds", 0.0)
+                )
+            ),
+        },
     }
     if channel_policy == "per_channel" and mode != "exploratory":
         raise ValueError("per_channel policy is only supported in exploratory mode.")
@@ -1600,10 +1632,10 @@ def _analyze_audio(
     silence_metrics = chosen["silence_metrics"]
     effective_duration = chosen["effective_duration"]
     resampled = chosen["resampled"]
-    gap_flags = evaluate_silence_gaps(
-        silence_metrics,
-        config=profile.thresholds.get("silence_detection", {}),
-    )
+    gap_summary = summarize_silence_gaps(silence_metrics, config=silence_cfg)
+    if silence_metrics:
+        silence_metrics["gaps"] = gap_summary
+    gap_flags = evaluate_silence_gaps(silence_metrics, config=silence_cfg)
     
     # Build QCReport
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1666,6 +1698,7 @@ def _analyze_audio(
             "leading_threshold_seconds": silence_cfg["leading_threshold_seconds"],
             "trailing_threshold_seconds": silence_cfg["trailing_threshold_seconds"],
             "min_content_seconds": silence_cfg["min_content_seconds"],
+            "max_gap_seconds": silence_cfg["gaps"]["max_gap_seconds"],
             "silence_ratio": silence_ratio,
             "effective_seconds": effective_duration
         }

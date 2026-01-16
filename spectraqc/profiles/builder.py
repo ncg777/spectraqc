@@ -233,6 +233,7 @@ def build_reference_profile(
                         "fail_count": 3,
                         "warn_total_seconds": 0.2,
                         "fail_total_seconds": 0.5,
+                        "max_gap_seconds": 0.0,
                     },
                 },
             },

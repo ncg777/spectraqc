@@ -5,6 +5,7 @@ DEFAULT_SILENCE_GAP_THRESHOLDS = {
     "fail_count": 3,
     "warn_total_seconds": 0.2,
     "fail_total_seconds": 0.5,
+    "max_gap_seconds": 0.0,
 }
 
 DEFAULT_SILENCE_DETECTION_CONFIG = {
@@ -52,32 +53,65 @@ def _status_from_counts(
     return None
 
 
-def evaluate_silence_gaps(metrics: dict, *, config: dict | None = None) -> list[dict]:
-    """Evaluate silence gap metrics against thresholds and return flags."""
+def summarize_silence_gaps(metrics: dict, *, config: dict | None = None) -> dict:
+    """Summarize silence gap metrics with per-gap status details."""
     cfg = build_silence_detection_config(config)
     gaps_cfg = cfg.get("gaps", DEFAULT_SILENCE_GAP_THRESHOLDS)
     gaps = metrics.get("gaps", {})
-    if not metrics.get("content_valid", True):
-        return []
-    count = int(gaps.get("count", 0))
+    max_gap_seconds = float(gaps_cfg.get("max_gap_seconds", 0.0))
+    segments = []
+    over_max_count = 0
+    for seg in gaps.get("segments", []):
+        duration = float(seg.get("duration_s", 0.0))
+        seg_status = "pass"
+        if max_gap_seconds > 0 and duration > max_gap_seconds:
+            seg_status = "fail"
+            over_max_count += 1
+        segments.append({**seg, "status": seg_status})
+    count = int(gaps.get("count", len(segments)))
     total_seconds = float(gaps.get("total_duration_s", 0.0))
-    status = _status_from_counts(
-        count=count,
-        total_seconds=total_seconds,
-        warn_count=int(gaps_cfg.get("warn_count", 1)),
-        fail_count=int(gaps_cfg.get("fail_count", 3)),
-        warn_total_seconds=float(gaps_cfg.get("warn_total_seconds", 0.2)),
-        fail_total_seconds=float(gaps_cfg.get("fail_total_seconds", 0.5)),
-    )
-    if not status:
+    longest_gap = float(gaps.get("longest_gap_s", 0.0))
+    if not metrics.get("content_valid", True):
+        status = "not_applicable"
+    else:
+        status = _status_from_counts(
+            count=count,
+            total_seconds=total_seconds,
+            warn_count=int(gaps_cfg.get("warn_count", 1)),
+            fail_count=int(gaps_cfg.get("fail_count", 3)),
+            warn_total_seconds=float(gaps_cfg.get("warn_total_seconds", 0.2)),
+            fail_total_seconds=float(gaps_cfg.get("fail_total_seconds", 0.5)),
+        )
+        if max_gap_seconds > 0 and over_max_count > 0:
+            status = "fail"
+        if status is None:
+            status = "pass"
+    return {
+        "count": count,
+        "total_duration_s": total_seconds,
+        "longest_gap_s": longest_gap,
+        "max_allowed_gap_s": max_gap_seconds,
+        "over_max_count": over_max_count,
+        "status": status,
+        "segments": segments,
+    }
+
+
+def evaluate_silence_gaps(metrics: dict, *, config: dict | None = None) -> list[dict]:
+    """Evaluate silence gap metrics against thresholds and return flags."""
+    summary = summarize_silence_gaps(metrics, config=config)
+    status = summary.get("status")
+    if status not in {"warn", "fail"}:
         return []
     return [
         {
             "rule_id": "silence_gap_segments",
             "status": status,
             "measurements": {
-                "count": count,
-                "total_duration_s": total_seconds,
+                "count": summary.get("count", 0),
+                "total_duration_s": summary.get("total_duration_s", 0.0),
+                "over_max_count": summary.get("over_max_count", 0),
+                "max_allowed_gap_s": summary.get("max_allowed_gap_s", 0.0),
             },
         }
     ]
