@@ -127,6 +127,12 @@ def build_reference_profile(
                 "octave_fraction": octave_fraction,
             },
             "channel_policy": "mono",
+            "silence_detection": {
+                "min_rms_dbfs": -60.0,
+                "frame_seconds": 0.1,
+                "hop_seconds": 0.1,
+                "min_duration_seconds": 0.3,
+            },
             "dynamic_range": {
                 "rms_percentile": {
                     "frame_seconds": 3.0,

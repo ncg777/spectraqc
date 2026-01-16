@@ -203,6 +203,22 @@ def build_qcreport_dict(
             _quantize_segment_block(channel.get("drop"))
             _quantize_segment_block(channel.get("zero"))
 
+    if "silence" in gm:
+        silence = gm["silence"]
+        if "total_silence_s" in silence:
+            silence["total_silence_s"] = q(float(silence["total_silence_s"]), 0.001)
+        if "silence_ratio" in silence:
+            silence["silence_ratio"] = q(float(silence["silence_ratio"]), 0.0001)
+        if "longest_silence_s" in silence:
+            silence["longest_silence_s"] = q(float(silence["longest_silence_s"]), 0.001)
+        for seg in silence.get("segments", []):
+            if "start_s" in seg:
+                seg["start_s"] = q(float(seg["start_s"]), 0.001)
+            if "end_s" in seg:
+                seg["end_s"] = q(float(seg["end_s"]), 0.001)
+            if "duration_s" in seg:
+                seg["duration_s"] = q(float(seg["duration_s"]), 0.001)
+
     if report.get("repair"):
         repair_metrics = report["repair"].get("metrics", {})
         for key in ("before", "after", "delta"):

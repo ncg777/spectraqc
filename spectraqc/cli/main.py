@@ -36,6 +36,7 @@ from spectraqc.metrics.levels import (
     rms_dbfs_mono,
     crest_factor_db_mono,
 )
+from spectraqc.metrics.silence import detect_silence_segments
 from spectraqc.metrics.dr import (
     dynamic_range_percentile_dbfs_mono,
     dynamic_range_short_term_lufs_mono,
@@ -1324,6 +1325,31 @@ def _analyze_audio(
     ref_var = profile.thresholds.get("_ref_var_db2", np.ones_like(profile.freqs_hz))
     ref_tilt = spectral_tilt_db_per_oct(profile.freqs_hz, profile.ref_mean_db)
     channel_policy = str(analysis_lock.get("channel_policy", "mono")).strip().lower()
+    silence_defaults = profile.thresholds.get("silence_detection", {})
+    silence_override = analysis_lock.get("silence_detection", {})
+    silence_cfg = {
+        "min_rms_dbfs": float(
+            silence_override.get(
+                "min_rms_dbfs", silence_defaults.get("min_rms_dbfs", SILENCE_MIN_RMS_DBFS)
+            )
+        ),
+        "frame_seconds": float(
+            silence_override.get(
+                "frame_seconds",
+                silence_defaults.get("frame_seconds", SILENCE_FRAME_SECONDS),
+            )
+        ),
+        "hop_seconds": float(
+            silence_override.get(
+                "hop_seconds", silence_defaults.get("hop_seconds", SILENCE_FRAME_SECONDS)
+            )
+        ),
+        "min_duration_seconds": float(
+            silence_override.get(
+                "min_duration_seconds", silence_defaults.get("min_duration_seconds", 0.3)
+            )
+        ),
+    }
     if channel_policy == "per_channel" and mode != "exploratory":
         raise ValueError("per_channel policy is only supported in exploratory mode.")
     algo_registry = build_algorithm_registry(
@@ -1382,13 +1408,18 @@ def _analyze_audio(
             warnings=list(mono_audio.warnings)
         )
 
-        silence_ratio = _compute_silence_ratio(
+        silence_metrics = detect_silence_segments(
             analysis_buffer.samples,
             analysis_buffer.fs,
-            min_rms_dbfs=SILENCE_MIN_RMS_DBFS,
-            frame_seconds=SILENCE_FRAME_SECONDS
+            min_rms_dbfs=silence_cfg["min_rms_dbfs"],
+            frame_seconds=silence_cfg["frame_seconds"],
+            hop_seconds=silence_cfg["hop_seconds"],
+            min_duration_seconds=silence_cfg["min_duration_seconds"],
         )
-        effective_duration = analysis_buffer.duration * (1.0 - silence_ratio)
+        silence_ratio = float(silence_metrics["silence_ratio"])
+        effective_duration = analysis_buffer.duration - float(
+            silence_metrics["total_silence_s"]
+        )
 
         ltpsd = compute_ltpsd(analysis_buffer, nfft=nfft, hop=hop)
         input_mean_db = interp_to_grid(ltpsd.freqs, ltpsd.mean_db, profile.freqs_hz)
@@ -1495,6 +1526,7 @@ def _analyze_audio(
             "analysis_buffer": analysis_buffer,
             "resampled": resampled,
             "silence_ratio": silence_ratio,
+            "silence_metrics": silence_metrics,
             "effective_duration": effective_duration,
             "ltpsd": ltpsd,
             "input_mean_db": input_mean_db,
@@ -1536,6 +1568,7 @@ def _analyze_audio(
     lra_lu = global_metrics.lra_lu
     analysis_buffer = chosen["analysis_buffer"]
     silence_ratio = chosen["silence_ratio"]
+    silence_metrics = chosen["silence_metrics"]
     effective_duration = chosen["effective_duration"]
     resampled = chosen["resampled"]
     
@@ -1593,7 +1626,10 @@ def _analyze_audio(
         },
         "silence_gate": {
             "enabled": False,
-            "min_rms_dbfs": SILENCE_MIN_RMS_DBFS,
+            "min_rms_dbfs": silence_cfg["min_rms_dbfs"],
+            "frame_seconds": silence_cfg["frame_seconds"],
+            "hop_seconds": silence_cfg["hop_seconds"],
+            "min_duration_seconds": silence_cfg["min_duration_seconds"],
             "silence_ratio": silence_ratio,
             "effective_seconds": effective_duration
         }
@@ -1643,6 +1679,8 @@ def _analyze_audio(
         global_metrics_dict["spectral_artifacts"] = spectral_artifacts
     if level_anomalies:
         global_metrics_dict["level_anomalies"] = level_anomalies
+    if silence_metrics:
+        global_metrics_dict["silence"] = silence_metrics
     
     # Decisions for report
     decisions_dict = {
