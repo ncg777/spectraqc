@@ -31,6 +31,7 @@ from spectraqc.metrics.tonal import detect_tonal_peaks
 from spectraqc.metrics.truepeak import true_peak_dbtp_mono
 from spectraqc.metrics.noise import noise_floor_dbfs_mono
 from spectraqc.metrics.level_anomalies import detect_level_anomalies
+from spectraqc.metrics.transient_spikes import detect_transient_spikes
 from spectraqc.metrics.levels import (
     peak_dbfs_mono,
     rms_dbfs_mono,
@@ -57,6 +58,7 @@ from spectraqc.thresholds.silence_detection import (
     evaluate_silence_gaps,
     summarize_silence_gaps,
 )
+from spectraqc.thresholds.transient_spikes import build_transient_spike_config
 from spectraqc.reporting.qcreport import build_qcreport_dict
 from spectraqc.reporting.batch_summary import (
     build_batch_summary,
@@ -1408,6 +1410,11 @@ def _analyze_audio(
             ),
         },
     }
+    transient_defaults = profile.thresholds.get("transient_spikes", {})
+    transient_override = analysis_lock.get("transient_spikes", {})
+    transient_cfg = build_transient_spike_config(transient_defaults)
+    if transient_override:
+        transient_cfg = build_transient_spike_config({**transient_cfg, **transient_override})
     if channel_policy == "per_channel" and mode != "exploratory":
         raise ValueError("per_channel policy is only supported in exploratory mode.")
     algo_registry = build_algorithm_registry(
@@ -1447,6 +1454,11 @@ def _analyze_audio(
     level_flags = evaluate_level_anomalies(
         level_anomalies,
         config=level_anomaly_cfg
+    )
+    transient_spikes = detect_transient_spikes(
+        audio.samples,
+        audio.fs,
+        config=transient_cfg,
     )
 
     def _analyze_single(mono_audio):
@@ -1701,7 +1713,8 @@ def _analyze_audio(
             "max_gap_seconds": silence_cfg["gaps"]["max_gap_seconds"],
             "silence_ratio": silence_ratio,
             "effective_seconds": effective_duration
-        }
+        },
+        "transient_spikes": transient_cfg,
     }
     
     # Band metrics for report
@@ -1750,6 +1763,8 @@ def _analyze_audio(
         global_metrics_dict["level_anomalies"] = level_anomalies
     if silence_metrics:
         global_metrics_dict["silence"] = silence_metrics
+    if transient_spikes:
+        global_metrics_dict["transient_spikes"] = transient_spikes
     
     # Decisions for report
     decisions_dict = {

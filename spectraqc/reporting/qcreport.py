@@ -244,6 +244,14 @@ def build_qcreport_dict(
                 if "duration_s" in seg:
                     seg["duration_s"] = q(float(seg["duration_s"]), 0.001)
 
+    if "transient_spikes" in gm:
+        spikes = gm["transient_spikes"]
+        if "time_indices_s" in spikes:
+            spikes["time_indices_s"] = q_list(spikes["time_indices_s"], 0.001)
+        for channel in spikes.get("channels", []):
+            if "time_indices_s" in channel:
+                channel["time_indices_s"] = q_list(channel["time_indices_s"], 0.001)
+
     if report.get("repair"):
         repair_metrics = report["repair"].get("metrics", {})
         for key in ("before", "after", "delta"):

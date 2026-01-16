@@ -5,6 +5,7 @@ from spectraqc.types import ReferenceProfile, FrequencyBand
 from spectraqc.thresholds.brickwall import build_spectral_artifact_config
 from spectraqc.thresholds.level_metrics import DEFAULT_LEVEL_METRIC_THRESHOLDS
 from spectraqc.thresholds.level_anomalies import build_level_anomaly_config
+from spectraqc.thresholds.transient_spikes import build_transient_spike_config
 from spectraqc.profiles.validator import validate_reference_profile_dict
 from spectraqc.metrics.tonal import derive_noise_floor_baselines
 from spectraqc.thresholds.silence_detection import build_silence_detection_config
@@ -83,6 +84,9 @@ def load_reference_profile(path: str) -> ReferenceProfile:
         ),
         "silence_detection": build_silence_detection_config(
             tm.get("silence_detection")
+        ),
+        "transient_spikes": build_transient_spike_config(
+            tm.get("transient_spikes")
         ),
     }
 

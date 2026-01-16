@@ -198,6 +198,20 @@ def validate_reference_profile_dict(j: dict) -> None:
         fail_seconds = zero_cfg.get("fail_total_seconds")
         if _is_number(warn_seconds) and _is_number(fail_seconds) and fail_seconds < warn_seconds:
             err("threshold_model.rules.level_anomalies.zero.fail_total_seconds must be >= warn_total_seconds.")
+    transient_spikes = rules.get("transient_spikes", {})
+    if transient_spikes:
+        channel_policy = transient_spikes.get("channel_policy", "per_channel")
+        if channel_policy not in ("per_channel", "average"):
+            err("threshold_model.rules.transient_spikes.channel_policy must be per_channel or average.")
+        for key in ("highpass_hz", "derivative_threshold", "min_separation_seconds"):
+            if key in transient_spikes and not _is_number(transient_spikes.get(key)):
+                err(f"threshold_model.rules.transient_spikes.{key} must be a number.")
+        if _is_number(transient_spikes.get("highpass_hz")) and transient_spikes.get("highpass_hz") < 0:
+            err("threshold_model.rules.transient_spikes.highpass_hz must be >= 0.")
+        if _is_number(transient_spikes.get("derivative_threshold")) and transient_spikes.get("derivative_threshold") <= 0:
+            err("threshold_model.rules.transient_spikes.derivative_threshold must be > 0.")
+        if _is_number(transient_spikes.get("min_separation_seconds")) and transient_spikes.get("min_separation_seconds") < 0:
+            err("threshold_model.rules.transient_spikes.min_separation_seconds must be >= 0.")
     by_band = rules.get("band_mean", {}).get("by_band", [])
     if isinstance(by_band, list):
         valid_names = {b.get("name") for b in bands if isinstance(b, dict)}
@@ -302,6 +316,21 @@ def validate_reference_profile_dict(j: dict) -> None:
     for key in ("warn_count", "fail_count", "warn_total_seconds", "fail_total_seconds"):
         if key in silence_gap_rules and not _is_number(silence_gap_rules.get(key)):
             err(f"threshold_model.rules.silence_detection.gaps.{key} must be a number.")
+
+    transient_lock = analysis_lock.get("transient_spikes", {})
+    if transient_lock:
+        channel_policy = transient_lock.get("channel_policy", "per_channel")
+        if channel_policy not in ("per_channel", "average"):
+            err("analysis_lock.transient_spikes.channel_policy must be per_channel or average.")
+        for key in ("highpass_hz", "derivative_threshold", "min_separation_seconds"):
+            if key in transient_lock and not _is_number(transient_lock.get(key)):
+                err(f"analysis_lock.transient_spikes.{key} must be a number.")
+        if _is_number(transient_lock.get("highpass_hz")) and transient_lock.get("highpass_hz") < 0:
+            err("analysis_lock.transient_spikes.highpass_hz must be >= 0.")
+        if _is_number(transient_lock.get("derivative_threshold")) and transient_lock.get("derivative_threshold") <= 0:
+            err("analysis_lock.transient_spikes.derivative_threshold must be > 0.")
+        if _is_number(transient_lock.get("min_separation_seconds")) and transient_lock.get("min_separation_seconds") < 0:
+            err("analysis_lock.transient_spikes.min_separation_seconds must be >= 0.")
 
     if errors:
         raise ValueError("; ".join(errors))
