@@ -94,6 +94,8 @@ def validate_reference_profile_dict(j: dict) -> None:
     noise_floor_dbfs = rules.get("noise_floor_dbfs", {})
     crest_factor_db = rules.get("crest_factor_db", {})
     loudness_range = rules.get("loudness_range", {})
+    dynamic_range_db = rules.get("dynamic_range_db", {})
+    dynamic_range_lu = rules.get("dynamic_range_lu", {})
     for name, obj in (("band_mean", band_mean), ("band_max", band_max), ("tilt", tilt)):
         p = obj.get("pass")
         w = obj.get("warn")
@@ -108,7 +110,6 @@ def validate_reference_profile_dict(j: dict) -> None:
         ("peak_dbfs", peak_dbfs),
         ("rms_dbfs", rms_dbfs),
         ("noise_floor_dbfs", noise_floor_dbfs),
-        ("crest_factor_db", crest_factor_db),
         ("loudness_range", loudness_range),
     ):
         if not obj:
@@ -117,6 +118,17 @@ def validate_reference_profile_dict(j: dict) -> None:
         w = obj.get("warn")
         if not _is_number(p) or not _is_number(w) or w < p:
             err(f"threshold_model.rules.{name} pass/warn must be numbers with warn>=pass.")
+    for name, obj in (
+        ("crest_factor_db", crest_factor_db),
+        ("dynamic_range_db", dynamic_range_db),
+        ("dynamic_range_lu", dynamic_range_lu),
+    ):
+        if not obj:
+            continue
+        p = obj.get("pass")
+        w = obj.get("warn")
+        if not _is_number(p) or not _is_number(w) or p < w:
+            err(f"threshold_model.rules.{name} pass/warn must be numbers with pass>=warn.")
     spectral_artifacts = rules.get("spectral_artifacts", {})
     if spectral_artifacts:
         cutoff = spectral_artifacts.get("cutoff", {})
@@ -205,6 +217,16 @@ def validate_reference_profile_dict(j: dict) -> None:
             err("analysis_lock.normalization.true_peak.max_dbtp must be number.")
         if not isinstance(tp.get("algorithm_id", ""), str) or not tp.get("algorithm_id"):
             err("analysis_lock.normalization.true_peak.algorithm_id required when enabled.")
+
+    dr_cfg = analysis_lock.get("dynamic_range", {})
+    rms_cfg = dr_cfg.get("rms_percentile", {})
+    short_term_cfg = dr_cfg.get("short_term_lufs", {})
+    for key in ("frame_seconds", "hop_seconds", "low_percentile", "high_percentile"):
+        if key in rms_cfg and not _is_number(rms_cfg.get(key)):
+            err(f"analysis_lock.dynamic_range.rms_percentile.{key} must be a number.")
+    for key in ("low_percentile", "high_percentile"):
+        if key in short_term_cfg and not _is_number(short_term_cfg.get(key)):
+            err(f"analysis_lock.dynamic_range.short_term_lufs.{key} must be a number.")
 
     if errors:
         raise ValueError("; ".join(errors))

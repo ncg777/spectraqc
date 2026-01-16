@@ -17,6 +17,9 @@ def build_algorithm_registry(
     hop = int(analysis_lock.get("hop_size", max(1, nfft // 2)))
     window = analysis_lock.get("window", "hann")
     psd_estimator = analysis_lock.get("psd_estimator", "welch")
+    dynamic_range_cfg = analysis_lock.get("dynamic_range", {})
+    rms_cfg = dynamic_range_cfg.get("rms_percentile", {})
+    short_term_cfg = dynamic_range_cfg.get("short_term_lufs", {})
 
     smoothing_type = smoothing_cfg.get("type", "none")
     smoothing_entry: dict
@@ -106,6 +109,22 @@ def build_algorithm_registry(
             "params": {
                 "policy": str(channel_policy)
             }
+        },
+        "dynamic_range_rms_percentile_v1": {
+            "id": "dynamic_range_rms_percentile_v1",
+            "params": {
+                "frame_seconds": float(rms_cfg.get("frame_seconds", 3.0)),
+                "hop_seconds": float(rms_cfg.get("hop_seconds", 1.0)),
+                "low_percentile": float(rms_cfg.get("low_percentile", 10.0)),
+                "high_percentile": float(rms_cfg.get("high_percentile", 95.0)),
+            },
+        },
+        "dynamic_range_short_term_lufs_v1": {
+            "id": "dynamic_range_short_term_lufs_v1",
+            "params": {
+                "low_percentile": float(short_term_cfg.get("low_percentile", 10.0)),
+                "high_percentile": float(short_term_cfg.get("high_percentile", 95.0)),
+            },
         }
     }
 

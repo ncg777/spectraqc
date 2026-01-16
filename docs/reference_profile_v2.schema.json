@@ -125,6 +125,30 @@
             }
           },
           "additionalProperties": false
+        },
+        "dynamic_range": {
+          "type": "object",
+          "properties": {
+            "rms_percentile": {
+              "type": "object",
+              "properties": {
+                "frame_seconds": { "type": "number" },
+                "hop_seconds": { "type": "number" },
+                "low_percentile": { "type": "number" },
+                "high_percentile": { "type": "number" }
+              },
+              "additionalProperties": false
+            },
+            "short_term_lufs": {
+              "type": "object",
+              "properties": {
+                "low_percentile": { "type": "number" },
+                "high_percentile": { "type": "number" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -214,6 +238,24 @@
               "additionalProperties": false
             },
             "loudness_range": {
+              "type": "object",
+              "required": ["pass", "warn"],
+              "properties": {
+                "pass": { "type": "number" },
+                "warn": { "type": "number" }
+              },
+              "additionalProperties": false
+            },
+            "dynamic_range_db": {
+              "type": "object",
+              "required": ["pass", "warn"],
+              "properties": {
+                "pass": { "type": "number" },
+                "warn": { "type": "number" }
+              },
+              "additionalProperties": false
+            },
+            "dynamic_range_lu": {
               "type": "object",
               "required": ["pass", "warn"],
               "properties": {

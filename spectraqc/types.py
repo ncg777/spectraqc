@@ -60,6 +60,8 @@ class GlobalMetrics:
     lra_lu: float | None = None
     tonal_peak_max_delta_db: float | None = None
     noise_floor_dbfs: float | None = None
+    dynamic_range_db: float | None = None
+    dynamic_range_lu: float | None = None
 
 
 @dataclass(frozen=True)
