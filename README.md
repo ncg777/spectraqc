@@ -402,33 +402,36 @@ Output behavior:
 
 ## Development scripts
 
+### `scripts/build_exe.py`
+- Purpose: build a standalone executable for distribution.
+- Usefulness: creates a single-file executable that includes Python runtime and all dependencies.
+
+Usage:
+```
+python scripts/build_exe.py [--onedir] [--clean] [--debug]
+```
+
+Options:
+- `--onedir`: create a folder bundle instead of a single executable.
+- `--clean`: remove previous build artifacts before building.
+- `--debug`: enable verbose logging for troubleshooting.
+- `--skip-verify`: skip automatic verification after build.
+
+Prerequisites:
+```
+pip install spectraqc[build]
+# or
+pip install pyinstaller>=6.0
+```
+
+Output:
+- Single-file mode (default): `dist/spectraqc.exe` (Windows) or `dist/spectraqc` (Linux/macOS)
+- One-dir mode: `dist/spectraqc/spectraqc.exe`
+
 ### `scripts/synth_vectors.py`
 - Purpose: generate deterministic synthetic audio vectors for validation.
 - Usefulness: provides known signals to validate analysis and thresholds.
 - Options: none (run as `python scripts/synth_vectors.py`).
-
-### `scripts/build_dev_ref.py`
-- Purpose: build a reference profile from a corpus manifest.
-- Usefulness: produces a profile for development and validation workflows.
-
-Usage:
-```
-python scripts/build_dev_ref.py --manifest <manifest.json> [options]
-```
-
-Options:
-- `--manifest` (required)
-  - Spec: path to corpus manifest JSON.
-  - Usefulness: defines the corpus used to build the profile.
-- `--out`
-  - Spec: output path for the profile JSON; defaults to `validation/profiles/<name>.ref.json`.
-  - Usefulness: lets you store generated profiles in custom locations.
-- `--name` (default: `streaming_generic_v1`)
-  - Spec: profile name.
-  - Usefulness: identifies the profile in reports and audits.
-- `--kind` (default: `streaming`)
-  - Spec: profile kind (`broadcast`, `streaming`, `archive`, `custom`).
-  - Usefulness: provides contextual classification for consumers.
 
 ## Known limitations
 - Loudness measurement depends on `ffmpeg` (via `ebur128`). If it is not installed, LUFS is reported as unavailable.

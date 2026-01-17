@@ -1,0 +1,20 @@
+Collecting pyinstaller
+  Downloading pyinstaller-6.18.0-py3-none-win_amd64.whl.metadata (8.5 kB)
+Collecting altgraph (from pyinstaller)
+  Downloading altgraph-0.17.5-py2.py3-none-any.whl.metadata (7.5 kB)
+Requirement already satisfied: packaging>=22.0 in c:\users\greni\miniconda3\lib\site-packages (from pyinstaller) (23.2)
+Collecting pefile>=2022.5.30 (from pyinstaller)
+  Downloading pefile-2024.8.26-py3-none-any.whl.metadata (1.4 kB)
+Collecting pyinstaller-hooks-contrib>=2025.9 (from pyinstaller)
+  Downloading pyinstaller_hooks_contrib-2025.11-py3-none-any.whl.metadata (16 kB)
+Collecting pywin32-ctypes>=0.2.1 (from pyinstaller)
+  Downloading pywin32_ctypes-0.2.3-py3-none-any.whl.metadata (3.9 kB)
+Requirement already satisfied: setuptools>=42.0.0 in c:\users\greni\miniconda3\lib\site-packages (from pyinstaller) (75.1.0)
+Downloading pyinstaller-6.18.0-py3-none-win_amd64.whl (1.4 MB)
+   ---------------------------------------- 1.4/1.4 MB 9.0 MB/s eta 0:00:00
+Downloading pefile-2024.8.26-py3-none-any.whl (74 kB)
+Downloading pyinstaller_hooks_contrib-2025.11-py3-none-any.whl (449 kB)
+Downloading pywin32_ctypes-0.2.3-py3-none-any.whl (30 kB)
+Downloading altgraph-0.17.5-py2.py3-none-any.whl (21 kB)
+Installing collected packages: altgraph, pywin32-ctypes, pyinstaller-hooks-contrib, pefile, pyinstaller
+Successfully installed altgraph-0.17.5 pefile-2024.8.26 pyinstaller-6.18.0 pyinstaller-hooks-contrib-2025.11 pywin32-ctypes-0.2.3
