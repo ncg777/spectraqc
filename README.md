@@ -12,7 +12,7 @@ Key goals:
 
 ## Scope and version alignment
 
-This repository implements a V1 CLI with a V2 reference profile schema. The V1 CLI is described in `docs/SpectraQC_V1_Full_Implementation.md`, and the V2 scope is defined in `docs/V2_SCOPE.md`. The profile schema is `docs/reference_profile_v2.schema.json`. The corpus manifest schema is `docs/corpus_manifest_v1.schema.json`.
+This repository implements a V1 CLI with a V1 reference profile schema. The V1 CLI is described in `docs/SpectraQC_V1_Full_Implementation.md`. The profile schema is `docs/reference_profile_v1.schema.json`. The corpus manifest schema is `docs/corpus_manifest_v1.schema.json`.
 
 The documentation below is authoritative for the behavior of the current codebase. When a document conflicts with code, code is normative.
 
@@ -53,7 +53,7 @@ The system MUST be deterministic for the same inputs, reference profile, and run
 ### Inputs and outputs
 - Inputs:
   - Audio file path (any supported format).
-  - Reference profile `.ref.json` (schema v2.0).
+  - Reference profile `.ref.json` (schema v1.0).
   - Optional corpus manifest for batch processing (schema v1.0).
 - Outputs:
   - QCReport JSON (single-file analysis).
@@ -169,8 +169,8 @@ Field details:
 
 The structure matches the implementation in `spectraqc/reporting/qcreport.py` and `spectraqc/cli/main.py`.
 
-### Reference profile schema (v2.0)
-A reference profile MUST conform to `docs/reference_profile_v2.schema.json`. Key sections:
+### Reference profile schema (v1.0)
+A reference profile MUST conform to `docs/reference_profile_v1.schema.json`. Key sections:
 - `profile`: name, kind, and version.
 - `frequency_grid`: one-sided FFT grid in Hz.
 - `reference_curves`: mean and variance curves, with optional percentiles.
@@ -458,7 +458,7 @@ Options:
 ## References
 - CLI and QCReport spec: `docs/SpectraQC_V1_Full_Implementation.md`
 - Profile versioning rules: `docs/profile_versioning.md`
-- Reference profile schema: `docs/reference_profile_v2.schema.json`
+- Reference profile schema: `docs/reference_profile_v1.schema.json`
 - Corpus manifest schema: `docs/corpus_manifest_v1.schema.json`
 - User guide: `docs/USER_GUIDE.md`
 - CLI reference: `docs/CLI_REFERENCE.md`

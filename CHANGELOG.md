@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deterministic spectral QC engine with reproducible hashing, QCReport JSON outputs, and batch summary/HTML reporting for audit-friendly workflows.
 - V1 CLI command suite: `analyze`, `validate`, `inspect-ref`, `build-profile`, `batch`, and `gui` (plus global `--version`) with documented exit codes and stdout/stderr discipline.
 - Repair workflow support via `spectraqc repair` with composable repair plans and recommended presets for archival and streaming outputs.
-- Reference profile (v2) and corpus manifest (v1) schemas to standardize analysis inputs and batch manifests.
+- Reference profile (v1) and corpus manifest (v1) schemas to standardize analysis inputs and batch manifests.
 
 ### Known Limitations
 - Loudness measurement depends on `ffmpeg` (via `ebur128`); when unavailable, LUFS metrics are reported as unavailable.
