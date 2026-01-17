@@ -103,6 +103,34 @@ Profiles define:
 
 Use profiles to ensure repeatable comparisons. A profile is required for every run.
 
+## 7.1) Building Your Own Profile
+
+To create a reference profile from your own audio corpus, use `build-profile`:
+
+**From a folder of reference recordings:**
+```bash
+spectraqc build-profile --folder /path/to/reference_audio --name my_profile --out my_profile.ref.json
+```
+
+**From a corpus manifest (recommended for audit trails):**
+```bash
+spectraqc build-profile --manifest /path/to/corpus.json --name broadcast_v1 --kind broadcast
+```
+
+**Options:**
+- `--folder`: directory containing representative audio files
+- `--manifest`: path to a corpus manifest JSON (mutually exclusive with `--folder`)
+- `--recursive`: when using `--folder`, recurse into subdirectories
+- `--name`: profile name (default: `streaming_generic_v1`)
+- `--kind`: profile kind — `broadcast`, `streaming`, `archive`, or `custom` (default: `streaming`)
+- `--out`: output path for the profile (default: `validation/profiles/<name>.ref.json`)
+
+**Best practices:**
+- Use 5–20 representative audio files that exemplify your target spectral shape.
+- Include a variety of typical content (speech, music, mixed) if your workflow handles mixed material.
+- Store the generated profile in version control alongside your QC configuration.
+- Use manifests when you need to document exactly which files contributed to the profile.
+
 ## 8) Analysis Modes
 
 Mode controls channel policy and compliance behavior:

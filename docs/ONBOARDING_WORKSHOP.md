@@ -85,7 +85,29 @@ Operational tip: version profiles and store them in source control.
 
 ---
 
-## Slide 9 — Channel Policies
+## Slide 9 — Building Your Own Profile
+
+Create a profile from your reference audio:
+
+```bash
+# From a folder of reference recordings
+spectraqc build-profile --folder ./reference_audio --name my_profile --out my_profile.ref.json
+
+# From a corpus manifest (for audit trails)
+spectraqc build-profile --manifest corpus.json --name broadcast_v1 --kind broadcast
+```
+
+Options:
+- `--folder`: directory of representative audio files
+- `--manifest`: JSON manifest for auditable corpus
+- `--recursive`: include subdirectories
+- `--name`: profile identifier
+- `--kind`: broadcast, streaming, archive, or custom
+- `--out`: output path (default: `validation/profiles/<name>.ref.json`)
+
+---
+
+## Slide 10 — Channel Policies
 
 - `mono`: downmix to mono
 - `stereo_average`: (L+R)/2
@@ -94,7 +116,7 @@ Operational tip: version profiles and store them in source control.
 
 ---
 
-## Slide 10 — Smoothing Options
+## Slide 11 — Smoothing Options
 
 - `none`: raw grid
 - `octave_fraction`: fractional‑octave averaging
@@ -104,7 +126,7 @@ Choose based on audit policy and reference curve design.
 
 ---
 
-## Slide 11 — Interpreting Decisions
+## Slide 12 — Interpreting Decisions
 
 - FAIL if any metric fails
 - WARN if band warnings meet the profile threshold
@@ -114,7 +136,7 @@ Decisions are reported with explicit metric values and thresholds.
 
 ---
 
-## Slide 12 — Confidence Flags
+## Slide 13 — Confidence Flags
 
 Confidence can be downgraded if:
 - Audio is too short
@@ -124,7 +146,7 @@ Confidence can be downgraded if:
 
 ---
 
-## Slide 13 — Operational Checklist
+## Slide 14 — Operational Checklist
 
 - [ ] Use a consistent profile for each program
 - [ ] Archive QCReports with source assets
@@ -133,7 +155,7 @@ Confidence can be downgraded if:
 
 ---
 
-## Slide 14 — Troubleshooting
+## Slide 15 — Troubleshooting
 
 Common fixes:
 - Install `ffmpeg` for LUFS + MP3 support
@@ -142,7 +164,7 @@ Common fixes:
 
 ---
 
-## Slide 15 — Next Steps
+## Slide 16 — Next Steps
 
 - Review `docs/USER_GUIDE.md`
 - Review `docs/CLI_REFERENCE.md`
