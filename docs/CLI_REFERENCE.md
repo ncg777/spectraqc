@@ -87,6 +87,40 @@ Outputs:
 - Reference profile JSON written to disk
 - Summary of profile metadata to stdout
 
+## Command: `repair`
+
+Purpose: apply a DSP repair plan to an audio file and produce a QC report.
+
+```bash
+spectraqc repair <audio_path> --profile <ref.json> --repair-plan <plan.yaml> [options]
+```
+
+Options:
+- `--profile`, `-p` **(required)**: reference profile JSON
+- `--repair-plan` **(required)**: path to repair plan (YAML or JSON)
+- `--out`: output path for repaired audio (default: `<input>.repaired.wav`)
+- `--report`: output path for QC report JSON (default: stdout)
+
+Outputs:
+- Repaired audio file
+- QC report comparing before/after metrics
+
+## Command: `gui`
+
+Purpose: launch an interactive web-based GUI for SpectraQC.
+
+```bash
+spectraqc gui [options]
+```
+
+Options:
+- `--host`: host interface to bind (default: `127.0.0.1`)
+- `--port`: port to serve the GUI on (default: `8000`)
+- `--no-open`: do not open the browser automatically
+
+Outputs:
+- Starts a local web server and opens the GUI in your default browser
+
 ## Command: `batch`
 
 Purpose: analyze a folder or manifest in parallel and produce batch summaries.
@@ -124,6 +158,26 @@ Single‑file QC:
 spectraqc analyze audio.wav --profile profile.ref.json --out audio.qcreport.json
 ```
 
+Quick validation:
+```bash
+spectraqc validate audio.wav --profile profile.ref.json
+```
+
+Build a profile from reference audio:
+```bash
+spectraqc build-profile --folder ./reference_audio --name my_profile --out my_profile.ref.json
+```
+
+Build a profile from a manifest:
+```bash
+spectraqc build-profile --manifest corpus.json --name broadcast_v1 --kind broadcast
+```
+
+Repair audio with a DSP plan:
+```bash
+spectraqc repair audio.wav --profile profile.ref.json --repair-plan fix_tilt.yaml --out audio_fixed.wav
+```
+
 Batch QC with folder scan:
 ```bash
 spectraqc batch --folder ./audio --profile profile.ref.json --out-dir ./reports --recursive
@@ -132,4 +186,10 @@ spectraqc batch --folder ./audio --profile profile.ref.json --out-dir ./reports 
 Batch QC with manifest:
 ```bash
 spectraqc batch --manifest manifest.json --profile profile.ref.json --out-dir ./reports
+```
+
+Launch the GUI:
+```bash
+spectraqc gui
+spectraqc gui --port 9000 --no-open
 ```
