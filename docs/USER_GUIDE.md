@@ -114,7 +114,7 @@ Mode controls channel policy and compliance behavior:
 Common issues:
 - **LUFS not measured**: install `ffmpeg` and re-run.
 - **MP3 decode errors**: ensure `ffmpeg` is installed.
-- **Profile validation errors**: check `docs/reference_profile_v2.schema.json`.
+- **Profile validation errors**: check `docs/reference_profile_v1.schema.json`.
 
 If output is unexpected, confirm:
 - The profile grid matches your target frequency range.
@@ -133,7 +133,7 @@ For institutional deployments:
 
 - CLI reference: `docs/CLI_REFERENCE.md`
 - Onboarding workshop deck: `docs/ONBOARDING_WORKSHOP.md`
-- Profile schema: `docs/reference_profile_v2.schema.json`
+- Profile schema: `docs/reference_profile_v1.schema.json`
 
 ## 12) Manual Browser Snapshot Test Plan (Report Viewer)
 

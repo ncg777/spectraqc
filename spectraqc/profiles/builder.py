@@ -94,7 +94,7 @@ def build_reference_profile(
     algorithm_ids = algorithm_ids_from_registry(algorithm_registry)
 
     profile = {
-        "schema_version": "2.0",
+        "schema_version": "1.0",
         "profile": {
             "name": profile_name,
             "kind": profile_kind,
