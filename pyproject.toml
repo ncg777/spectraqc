@@ -2,12 +2,27 @@
 name = "spectraqc"
 version = "1.0.0"
 description = "Spectral QC tool (V1 CLI)"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
   "numpy>=2.0",
   "pyyaml>=6.0",
   "soundfile>=0.12.1",
 ]
+classifiers = [
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Multimedia :: Sound/Audio :: Analysis",
+]
+
+[project.urls]
+Homepage = "https://github.com/ncg777/spectraqc"
+Repository = "https://github.com/ncg777/spectraqc"
+Documentation = "https://github.com/ncg777/spectraqc"
 
 [project.optional-dependencies]
 test = [
