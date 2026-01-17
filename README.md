@@ -1,5 +1,7 @@
 ﻿# SpectraQC Documentation
 
+> **Note**: This README is for developers. If you downloaded the standalone executable, see the README.md included in the release package.
+
 ## Purpose and usefulness
 
 SpectraQC is a deterministic spectral quality control tool for audio. Its purpose is to let you verify that an audio file or an entire corpus conforms to a declared reference profile with reproducible, audit-friendly outputs. It is useful when you need technical consistency checks that can be rerun later with the same inputs and get the same decisions, without subjective judgments or automatic correction.
@@ -447,6 +449,25 @@ pip install pyinstaller>=6.0
 Output:
 - Single-file mode (default): `dist/spectraqc.exe` (Windows) or `dist/spectraqc` (Linux/macOS)
 - One-dir mode: `dist/spectraqc/spectraqc.exe`
+
+### `scripts/build_release.py`
+- Purpose: build and package a complete release for GitHub distribution.
+- Usefulness: creates a versioned zip file containing the executable and documentation.
+
+Usage:
+```
+python scripts/build_release.py [--skip-build] [--platform PLATFORM]
+```
+
+Options:
+- `--skip-build`: use existing executable in `dist/` instead of rebuilding.
+- `--platform`: override the platform tag (default: auto-detected, e.g., `windows-x64`).
+
+Output:
+- `release/spectraqc-<version>-<platform>.zip` containing:
+  - The standalone executable (and dependencies if one-folder mode)
+  - `docs/` folder (excluding `marketing/` subfolder)
+  - `README.md`
 
 ### `scripts/synth_vectors.py`
 - Purpose: generate deterministic synthetic audio vectors for validation.
