@@ -415,10 +415,11 @@ def build_reference_profile_from_manifest(
         profile_kind=profile_kind,
     )
 
-    base_dir = Path(__file__).parent.parent.parent
-    profiles_dir = base_dir / "validation" / "profiles"
-    profiles_dir.mkdir(parents=True, exist_ok=True)
-    resolved_output = Path(output_path) if output_path else profiles_dir / f"{profile_name}.ref.json"
+    # Default output to current working directory, not module location
+    if output_path:
+        resolved_output = Path(output_path)
+    else:
+        resolved_output = Path.cwd() / f"{profile_name}.ref.json"
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
     resolved_output.write_text(json.dumps(profile, indent=2), encoding="utf-8")
 
@@ -448,10 +449,11 @@ def build_reference_profile_from_folder(
         profile_kind=profile_kind,
     )
 
-    base_dir = Path(__file__).parent.parent.parent
-    profiles_dir = base_dir / "validation" / "profiles"
-    profiles_dir.mkdir(parents=True, exist_ok=True)
-    resolved_output = Path(output_path) if output_path else profiles_dir / f"{profile_name}.ref.json"
+    # Default output to current working directory, not module location
+    if output_path:
+        resolved_output = Path(output_path)
+    else:
+        resolved_output = Path.cwd() / f"{profile_name}.ref.json"
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
     resolved_output.write_text(json.dumps(profile, indent=2), encoding="utf-8")
 

@@ -79,7 +79,7 @@ Options:
 - `--manifest`: corpus manifest JSON path
 - `--folder`: folder containing reference audio files
 - `--recursive`: scan subfolders when using `--folder`
-- `--out`: output path for the profile JSON
+- `--out`: output path for the profile JSON (default: `./<name>.ref.json`)
 - `--name`: profile name (default: `streaming_generic_v1`)
 - `--kind`: profile kind (`broadcast`, `streaming`, `archive`, `custom`)
 
